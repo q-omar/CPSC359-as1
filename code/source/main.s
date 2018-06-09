@@ -35,8 +35,18 @@ main:
 	@ Initialize SNES controller
 	bl	initSNES
 
-	@ Initialize game
-	bl	initGame
+	@ Draws a black screen for the background
+	ldr	r0, =background
+	bl	drawImage
+
+	@ Initializes and draws bricks
+	bl	initBricks
+	bl	drawBricks
+
+	@ Draws starting location of ball
+	ldr	r0, =ball
+	bl	drawImage
+
 
 looptop:
 	@ Draw paddle
@@ -56,20 +66,6 @@ looptop:
 	haltLoop$:
 		b	haltLoop$
 
-initGame:
-	@ Draws a black screen for the background
-	ldr	r0, =background
-	bl	drawImage
-
-	@ Initializes and draws bricks
-	bl	initBricks
-	bl	drawBricks
-
-	@ Draws starting location of ball
-	ldr	r0, =ball
-	bl	drawImage
-
-	mov	pc, lr
 
 //----------------------------------------------------------------------------
 //Returns the bit at a given index of a 16-bit integer
