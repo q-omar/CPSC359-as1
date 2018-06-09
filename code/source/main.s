@@ -47,12 +47,18 @@ main:
 	@ Initialize frame buffer
 	ldr	r0, =frameBufferInfo
 	bl	initFbInfo
-
+	
+	
 	@ Initialize SNES controller
 	bl	initSNES
+	.global menu  //select goes back to menu, start to reset game
+menu:
+	bl	drawMenu
+	bl 	menuControl
 
 	@ Initialize game
 	bl	initGame
+	
 
 looptop:
 
@@ -74,6 +80,9 @@ initGame:
 	push	{lr}
 
 	@ Reset lives and score to 0*
+
+	cmp		r0, #0			// if menuControl returns 0 in r0 then... 
+	bne		haltLoop$		// ... quit game
 
 	@ Draws a black screen for the background
 	ldr	r0, =background
@@ -479,6 +488,7 @@ top2:	@ Inner loop runs <object width> times, drawing 1
 
 @ Draws an image using bitmap data.
 @ r0 - address of image object
+.global drawImage
 drawImage:
 	push	{r4, r5, r6, r7}
 	offset	.req	r6
