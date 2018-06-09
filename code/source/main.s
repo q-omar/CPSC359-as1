@@ -7,6 +7,7 @@
 leftBound = 520
 rightBound = 1080
 topBound = 120
+lowerBound = 900
 
 @ Window parameters
 windowX = 500
@@ -25,6 +26,21 @@ brickSpacing = 15		@ Distance (in pixels) between bricks
 brickStartX = leftBound + 12
 brickStartY = topBound + 60
 
+@ Paddle starting parameters
+padWidth = 100
+padHeight = 30
+padX = windowX + windowWidth/2 - padWidth/2
+padY = lowerBound - 100
+
+@ Ball starting parameters
+ballWidth = 15
+ballX = padX + padWidth/2 - ballWidth/2
+ballY = padY - ballWidth
+
+@ Score and lives x coordinates
+onesDigX = 600
+tensDigX = onesDigX - 50
+livesX = 1000
 
 .global main
 main:
@@ -35,23 +51,10 @@ main:
 	@ Initialize SNES controller
 	bl	initSNES
 
-	@ Draws a black screen for the background
-	ldr	r0, =background
-	bl	drawImage
-
-	@ Initializes and draws bricks
-	bl	initBricks
-	bl	drawBricks
-
-	@ Draws starting location of ball
-	ldr	r0, =ball
-	bl	drawImage
-
+	@ Initialize game
+	bl	initGame
 
 looptop:
-	@ Draw paddle
-	ldr	r0, =paddle
-	bl	drawRect
 
 	@ Check for user input
 	bl	getInput
@@ -66,6 +69,69 @@ looptop:
 	haltLoop$:
 		b	haltLoop$
 
+@ Sets the game to initial conditions (position of objects, # of lives, etc.)
+initGame:
+	push	{lr}
+
+	@ Reset lives and score to 0*
+
+	@ Draws a black screen for the background
+	ldr	r0, =background
+	bl	drawImage
+
+	@ Initializes and draws bricks
+	bl	initBricks
+	bl	resetBricks
+	bl	drawBricks
+
+	@ Center paddle in middle of window
+	ldr	r0, =paddle
+	mov	r1, #padX
+	str	r1, [r0]	// Store X coordinate
+
+	mov	r1, #padY
+	str	r1, [r0, #4]	// Store Y coordinate
+
+	bl	drawRect	// Draw paddle at initial coordinates
+
+	@ Draws starting location of ball
+	ldr	r0, =ball
+	mov	r1, #ballX
+	str	r1, [r0]	// Store X coord
+
+	mov	r1, #ballY
+	str	r1, [r0, #4]	// Store Y coordinate
+	bl	drawImage
+
+	pop	{pc}
+	
+
+drawScore:
+	push	{r4, r5, lr}
+
+	score	.req	r4
+
+	@ Load current score
+	ldr	r0, =score
+	ldr	score, [r0]
+	
+	@ Check the tens digit of the score
+	mov	r1, #10
+	udiv	r2, score, r1	@ r2 = score/10
+
+	@ Load address of image for digit
+	ldr	r5, =digArray		@ r5 = base address of digit images array
+	ldr	r0, [r3, r2, lsl #2]	@ r0 = address of correct image
+	
+	@ Set x coordinate for digit
+	mov	r2, #tensDigX
+	str	r2, [r0]
+
+	@ Draw digit
+	bl	drawImage
+
+	pop	{r4, r5, pc}
+	
 
 //----------------------------------------------------------------------------
 //Returns the bit at a given index of a 16-bit integer
@@ -90,14 +156,6 @@ processInput:
 
 	mov	r4, r0		// Save pressed buttons to r4
 
-	@ Check if Select is pressed
-	mov	r0, r4
-	mov	r1, #3
-// return to menu
-
-	@ Check if Start is pressed
-	mov	r0, r4
-	mov	r1, #4
 // Restart game
 
 	@ Check if A is pressed
@@ -128,6 +186,19 @@ processInput:
 	moveq	r0, #8
 	moveq	r1, r5
 	bleq	movePaddle
+
+	@ Check if Start is pressed
+	mov	r0, r4
+	mov	r1, #4
+	bl	getBit
+	cmp	r1, #0		// If Start is pressed, reset game
+	bleq	initGame
+
+	@ Check if Select is pressed
+	mov	r0, r4
+	mov	r1, #3
+// Return to menu if so
+
 
 	pop	{r4, r5, pc}
 
@@ -178,23 +249,25 @@ end1:
 	pop	{r4, r5, r6, r7, r8, pc}
 
 
-@ Resets the health of all the bricks. - incomplete
+@ Sets the health of all the bricks to full.
 resetBricks:
 	ldr	r0, =bricks
 	mov	r1, #3		// Health counter
 	mov	r2, #bPerRow	// Counter for # of bricks in a row
 
-outer2:	
+outer2:	@ Outer loop runs once for each row of breaks
 
-inner2:
+inner2: @ Inner loop runs once for each brick in a row
 	str	r1, [r0, #20]	// Store health for single brick
 	add	r0, #brickSize	// Update r0 to address of next brick
 
-	sub	r2, #1
+	sub	r2, #1		// Loop for each brick in the row
 	bne	inner2
 
-	sub	r1, #1
+	sub	r1, #1		// Decrease health of bricks in next row
 	bne	outer2
+
+	bx	lr
 
 
 @ Loops through the brick array to draw all the bricks on screen.
@@ -425,8 +498,10 @@ frameBufferInfo:
 	.int	0		@ screen width
 	.int	0		@ screen height
 
+score:	.int	10
+lives:	.int	3
+
 @ window object
-@ ** Would be better to center based on screen width and height later
 window:
 	.int	500		@ x coordinate
 	.int	100		@ y coordinate
@@ -435,10 +510,10 @@ window:
 	.int	0		@ Color (black)
 
 ball:
-	.int	790		@ x coordinate
-	.int	785		@ y coordinate
-	.int	15		@ width
-	.int	15		@ height
+	.int	ballX		@ x coordinate
+	.int	ballY		@ y coordinate
+	.int	ballWidth	@ width
+	.int	ballWidth	@ height
 .ascii "\000\000\000\377\000\000\000\377\000\000\000\377\000\000\000\377X}\346\377X}\346\377X}\346\377X}\346\377X}\346\377X}\346\377"
 .ascii "X}\346\377\000\000\000\377\000\000\000\377\000\000\000\377\000\000\000\377\000\000\000\377\000\000\000\377\000\000\000\377X}\346\377j\211\343\377"
 .ascii "j\211\343\377x\236\346\377x\236\346\377x\236\346\377x\236\346\377x\236\346\377X}\346\377\000\000\000\377\000\000\000\377\000\000\000\377"
@@ -464,10 +539,10 @@ ball:
 .ascii "Aa\277\377\000\000\000\377\000\000\000\377\000\000\000\377\000\000\000\377"
 
 paddle:
-	.int	760		@ x coordinate
-	.int	800		@ y coordinate
-	.int	100		@ width
-	.int	30		@ height
+	.int	padX		@ x coordinate
+	.int	padY		@ y coordinate
+	.int	padWidth	@ width
+	.int	padHeight	@ height
 	.int	0x800000	@ color ("maroon")
 
 
