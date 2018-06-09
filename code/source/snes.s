@@ -41,31 +41,7 @@ getInput:
 	ldr	r1, =0xFFFF
 	cmp	r0, r1
 	moveq	r0, #0
-	beq	endInput
 
-	@ Otherwise determine which button was pressed
-
-	mov	r1, #0		// Use r1 as counter
-butLoop:
-	mov	r2, #1		// Set r2 to 1 and shift to current position
-	lsl	r2, r1
-	tst	r0, r2		// Mask all other bits
-
-	beq	buttonpressed	// If result is 0, the button was pressed
-
-	add	r1, #1		// Otherwise check next button
-	b	butLoop
-
-buttonpressed:
-	@ Release button??
-	add	r4, r1, #1	// Code of button pressed = bit of button + 1
-
-	mov	r0, #5000		// Change to adjust controller sensitivity
-	bl	delayMicroseconds
-
-	mov	r0, r4		
-
-endInput:
 	pop	{r4, pc}
 
 @ Initializes a GPIO line with a function.
@@ -253,6 +229,7 @@ test:
 
 	pop	{r4, pc}
 
+
 @ Data section
 .section .data
 
@@ -262,19 +239,6 @@ test:
 GpioPtr:
 	.int	0	@ GPIO base address
 
-//----------------------------------------------------------------------------
-/* Returns the bit at a given index of a 16-bit integer
- * Args:
- *  r0 - the number
- *  r1 - index of bit to get value of
- * Return:
- *  r1 - the desired bit
-*/
-.globl      getBit
-getBit:
-    mov     r2, #1          // r2 = b(...00001)
-    mov     r2, r2, lsl r1  // left shift r2 by r1
-    and     r1, r0, r2      // r1: AND r0 with r2 to select only desired bit
-    bx      lr              // return
+
 
 
