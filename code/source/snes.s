@@ -262,6 +262,19 @@ test:
 GpioPtr:
 	.int	0	@ GPIO base address
 
-
+//----------------------------------------------------------------------------
+/* Returns the bit at a given index of a 16-bit integer
+ * Args:
+ *  r0 - the number
+ *  r1 - index of bit to get value of
+ * Return:
+ *  r1 - the desired bit
+*/
+.globl      getBit
+getBit:
+    mov     r2, #1          // r2 = b(...00001)
+    mov     r2, r2, lsl r1  // left shift r2 by r1
+    and     r1, r0, r2      // r1: AND r0 with r2 to select only desired bit
+    bx      lr              // return
 
 
