@@ -197,6 +197,15 @@ processInput:
 	@ Check if Select is pressed
 	mov	r0, r4
 	mov	r1, #3
+	
+	@ Check if B is pressed
+
+	mov 	r0, r4
+	mov 	r1, #1
+	bl 	getBit
+
+	cmp 	r1, #0
+	bleq	launchBall
 // Return to menu if so
 
 
@@ -247,7 +256,35 @@ leftmov:
 	bl	drawRect	@ Redraw the moved paddle
 end1:
 	pop	{r4, r5, r6, r7, r8, pc}
+launchBall:
+	
+	push {r5, r6, r7, lr}
+	
+	ldr	r0, =ball	@ r0 = base address of ball
+	bl clearObj
+	
+	ldr	r0, =ball	@ r0 = base address of ball	
+	
+	@ Increment y- coordinate whenever B is pressed
+	ldr	r9, [r0, #4]	@ load y- coordinate of the ball
+	sub	r9, #1
+	str	r9, [r0, #4]
+	
+	@ Check if the paddle is already at the right boundary	
+	ldr	r5, [r0]
+	mov	r6, #rightBound
+	ldr	r7, [r0, #8]	@ r7 = width of ball
+	add	r7, r7, r5	@ r7 = x coordinate of right end of ball
 
+	@ If the balls's right end is not at the boundary, move right
+	cmp	r7, r6		
+	addlt	r5, #1
+	strlt	r5, [r0]
+	bl	drawImage	@ Redraw the moved ball
+
+	cmp	r7, r6
+	bge	launchBall
+	pop {r5, r6, r7, pc}
 
 @ Sets the health of all the bricks to full.
 resetBricks:
