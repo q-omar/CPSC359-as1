@@ -4,16 +4,13 @@
 menuControl:
 	push	{lr}
 	
-menuControllerInput:	
-	
-    mov	r0, #9999		//control sensitivity
-	bl	delayMicroseconds
+menuControlLoop:	
 
 	bl	getInput		// read SNES input
 	mov r1, #0
 	teq	r0, r1			//no buttons pressed
 
-	beq	menuControllerInput	// read controller again 
+	beq	menuControlLoop	// read controller again 
 	
     ldr	r1, =0xFEFF		
 	teq	r0, r1			// a press
@@ -21,13 +18,13 @@ menuControllerInput:
 	
     ldr	r1, =0xFFEF		
 	teq	r0, r1			//up or down keep looping the menu selection
-	beq	mainMenuChangeSelection
+	beq	selectionChanged
 
 	ldr	r1, =0xFFDF		
 	teq	r0, r1			// down
-	beq	mainMenuChangeSelection
+	beq	selectionChanged
 
-	b	menuControllerInput	// loop again if multiple buttons being pressed
+	b	menuControlLoop	// loop again if multiple buttons being pressed
 		
 
 buttonEventA:
@@ -36,28 +33,71 @@ buttonEventA:
 	cmp		r1, #0					
 	bne		mainMenuQuitGame		// quit game if 0
 
+
 mainMenuStartGame:
 	mov		r0, #0				
-	b		mainMenuDone
-
-mainMenuQuitGame:	
-	    mov    r4, #0           //init counter to 0
+	b		menuComplete
 
 
-mainMenuChangeSelection:
+mainMenuQuitGame:		
+	b	drawQuitScreen
+
+
+selectionChanged:
 	bl		menuSelection
-	b		mainMenuLetGo
+	b		menuConfirm
 		
-mainMenuLetGo:
-	mov	r0, #9999		
-	bl	delayMicroseconds 
 
+menuConfirm:
 	bl	getInput	// read from the controller
 	mov r1, #0
 	teq	r0, r1			// compare value when no buttons pressed to what we got from controller
-	bne	mainMenuLetGo	// until no buttons pressed loop back up
-	b	menuControllerInput // after no buttons are pressed check for next button
+	bne	menuConfirm	// until no buttons pressed loop back up
+	b	menuControlLoop // after no buttons are pressed check for next button
 
 
-mainMenuDone:	
+menuComplete:	
 	pop		{pc}
+
+
+menuSelection:
+	selection	.req	r4	//current menu item highlighted
+	selectAdrs	.req	r5	// menu item value (0 for quit, 1 for play)
+	push	{r4-r5, lr}
+	
+	ldr		selectAdrs, =mainMenuSelected //load 0 or 1
+	ldr		selection, [selectAdrs]	//put into register
+	cmp		selection, #0	// check if play is selected
+	beq		quitGameSelect // if it is, then the only select option is to go to quit
+	
+
+startGameSelect: // drawing arrow on play game
+	ldr r0, =deleteSelectorImgOnQuit
+	bl drawImage
+	ldr r0, =selectorImgOnPlay
+	bl drawImage
+	
+	ldr		selectAdrs, =mainMenuSelected //load 0 or 1
+	ldr		selection, [selectAdrs]	//put into register
+	mov		r0,	#0
+	str		r0, [selectAdrs]	// store the selection
+	b		doneSelect		// this will quit the game				
+	
+
+quitGameSelect: // this is when we select quit game
+	ldr r0, =deleteSelectorImgOnPlay 
+	bl drawImage
+	ldr r0, =selectorImgOnQuit 
+	bl drawImage
+	
+	ldr		selectAdrs, =mainMenuSelected //load 0 or 1
+	ldr		selection, [selectAdrs]	//put into register
+	mov		r0,	#1
+	str		r0, [selectAdrs]	// store the selection
+	
+	
+doneSelect:	// when selection is done, pass 0 or 1 back 
+
+	.unreq	selection
+	.unreq	selectAdrs
+	pop		{r4-r5, pc}

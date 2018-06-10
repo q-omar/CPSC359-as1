@@ -18,12 +18,12 @@ windowHeight = 800
 @ Brick parameters
 bPerRow = 10			@ # of bricks per row
 numRows = 3			@ Number of rows of bricks
-brickWidth = 40
-brickHeight = 20
+brickWidth = 54
+brickHeight = 30
 brickSize = 24			@ Size of an individual brick in memory
-brickSpacing = 15		@ Distance (in pixels) between bricks
+brickSpacing = 2		@ Distance (in pixels) between bricks
 
-brickStartX = leftBound + 12
+brickStartX = leftBound
 brickStartY = topBound + 60
 
 @ Paddle starting parameters
@@ -38,27 +38,27 @@ ballX = padX + padWidth/2 - ballWidth/2
 ballY = padY - ballWidth
 
 @ Score and lives x coordinates
-onesDigX = 600
-tensDigX = onesDigX - 50
-livesX = 1000
+onesDigX = 750
+tensDigX = onesDigX - 40
+livesX = 1025
+
+numLives = 3
 
 .global main
 main:
 	@ Initialize frame buffer
 	ldr	r0, =frameBufferInfo
 	bl	initFbInfo
-	
-	
+
 	@ Initialize SNES controller
 	bl	initSNES
-	.global menu  //select goes back to menu, start to reset game
+	
 menu:
 	bl	drawMenu
 	bl 	menuControl
 
 	@ Initialize game
 	bl	initGame
-	
 
 looptop:
 
@@ -72,6 +72,7 @@ looptop:
 
 	b	looptop
 
+.global haltLoop$
 	haltLoop$:
 		b	haltLoop$
 
@@ -79,14 +80,21 @@ looptop:
 initGame:
 	push	{lr}
 
-	@ Reset lives and score to 0*
-
-	cmp		r0, #0			// if menuControl returns 0 in r0 then... 
-	bne		haltLoop$		// ... quit game
-
 	@ Draws a black screen for the background
 	ldr	r0, =background
 	bl	drawImage
+
+	@ Reset score to 0 and redraw
+	ldr	r0, =score
+	mov	r1, #0
+	str	r1, [r0]
+	bl	drawScore
+
+	@ Restore all lives and redraw
+	ldr	r0, =lives
+	mov	r1, #numLives
+	str	r1, [r0]
+	bl	drawLives
 
 	@ Initializes and draws bricks
 	bl	initBricks
@@ -115,31 +123,7 @@ initGame:
 	pop	{pc}
 	
 
-drawScore:
-	push	{r4, r5, lr}
 
-	score	.req	r4
-
-	@ Load current score
-	ldr	r0, =score
-	ldr	score, [r0]
-	
-	@ Check the tens digit of the score
-	mov	r1, #10
-	udiv	r2, score, r1	@ r2 = score/10
-
-	@ Load address of image for digit
-	ldr	r5, =digArray		@ r5 = base address of digit images array
-	ldr	r0, [r3, r2, lsl #2]	@ r0 = address of correct image
-	
-	@ Set x coordinate for digit
-	mov	r2, #tensDigX
-	str	r2, [r0]
-
-	@ Draw digit
-	bl	drawImage
-
-	pop	{r4, r5, pc}
 	
 
 //----------------------------------------------------------------------------
@@ -150,7 +134,7 @@ drawScore:
 //Return:
 //r1 - the desired bit
 
-.globl      getBit
+.global      getBit
 getBit:
     mov     r2, #1          // r2 = b(...00001)
 sub r1, #1
@@ -159,13 +143,11 @@ sub r1, #1
     bx      lr              // return
 
 @ Receives pressed button from SNES controller and updates the game state appropriately.
-@ r0 - number of the button pressed
+@ r0 - number of the button pressedbleq
 processInput:
 	push	{r4, r5, lr}
 
 	mov	r4, r0		// Save pressed buttons to r4
-
-// Restart game
 
 	@ Check if A is pressed
 	mov	r0, r4
@@ -206,15 +188,18 @@ processInput:
 	@ Check if Select is pressed
 	mov	r0, r4
 	mov	r1, #3
-	
-	@ Check if B is pressed
+	bl	getBit
+	cmp	r1, #0		// If select is pressed, go back to main menu 
+	beq	main
 
+	@ Check if B is pressed
 	mov 	r0, r4
 	mov 	r1, #1
 	bl 	getBit
 
 	cmp 	r1, #0
-	bleq	launchBall
+	beq	launchBall
+	
 // Return to menu if so
 
 
@@ -265,6 +250,7 @@ leftmov:
 	bl	drawRect	@ Redraw the moved paddle
 end1:
 	pop	{r4, r5, r6, r7, r8, pc}
+
 launchBall:
 
 	push {r5, r6, r7, lr}
@@ -326,24 +312,7 @@ inner2: @ Inner loop runs once for each brick in a row
 	bx	lr
 
 
-@ Loops through the brick array to draw all the bricks on screen.
-drawBricks:
-	push	{r4, r5, lr}
 
-	@ Load base address for bricks
-	ldr	r4, =bricks
-	ldr	r5, =endBricks
-
-drawtop:
-	mov	r0, r4
-	bl	drawRect
-	add	r4, #brickSize
-	
-	@ Check if current address is past end of array
-	cmp	r4, r5
-	blt	drawtop
-
-	pop	{r4, r5, pc}
 
 @ Sets the coordinates for all the bricks.
 initBricks:
@@ -446,193 +415,6 @@ top6:	@ Inner loop runs <object width> times, drawing 1
 
 	pop	{r4, r5, r6}
 	bx	lr
-
-
-@ Draws a solid, coloured rectangle.
-@ r0 - address of rectangular object to draw
-drawRect:
-	push	{r4, r5, r6}
-	offset	.req	r6
-
-	ldr	r1, =frameBufferInfo
-	ldr	r2, [r0]	@ r2 = x coordinate of object
-	ldr	r3, [r0, #4]	@ r3 = y coordinate
-	ldr	r4, [r1, #4]	@ r4 = screen width
-	ldr	r5, [r0, #16]	@ r5 = object colour
-
-	@ Calculate initial offset
-	mul	r3, r4		@ r1 = y * width
-	add	offset, r2, r3
-
-	ldr	r1, [r1]	@ r1 = frame buffer pointer
-	ldr	r2, [r0, #8]	@ r2 = width of object
-	ldr	r3, [r0, #12]	@ r3 = height of object
-
-	@ Outer loop runs <object height> times, drawing
-	@ one horizontal line each time
-top1:	
-	@ Initialize counter for inner loop
-	mov	r0, #0
-
-top2:	@ Inner loop runs <object width> times, drawing 1
-	@ pixel each time
-
-	str	r5, [r1, offset, lsl #2]	@ Store color at physical offset
-	add	offset, #1			@ Increment offset
-
-	@ Loop while inner count is < object width
-	add	r0, #1
-	cmp	r0, r2
-	blt	top2
-
-	@ Move offset to next line by adding screen width - object width
-	add	offset, r4
-	sub	offset, r2
-
-	@ Loop while outer count is not 0
-	subs	r3, #1
-	bne	top1
-
-	pop	{r4, r5, r6}
-	bx	lr
-
-@ Draws an image using bitmap data.
-@ r0 - address of image object
-.global drawImage
-drawImage:
-	push	{r4, r5, r6, r7}
-	offset	.req	r6
-
-	ldr	r1, =frameBufferInfo
-	ldr	r2, [r0]	@ r2 = x coordinate of object
-	ldr	r3, [r0, #4]	@ r3 = y coordinate
-	ldr	r4, [r1, #4]	@ r4 = screen width
-
-	@ Calculate initial offset
-	mul	r3, r4		@ r1 = y * width
-	add	offset, r2, r3
-
-	ldr	r1, [r1]	@ r1 = frame buffer pointer
-	ldr	r2, [r0, #8]	@ r2 = width of object
-	ldr	r3, [r0, #12]	@ r3 = height of object
-	add	r5, r0, #16	@ r5 = address of image data
-
-	@ Outer loop runs <object height> times, drawing
-	@ one horizontal line each time
-top3:	
-	@ Initialize counter for inner loop
-	mov	r7, #0
-
-top4:	@ Inner loop runs <object width> times, drawing 1
-	@ pixel each time
-	ldr	r0, [r5], #4			@ Load image data and update address
-	str	r0, [r1, offset, lsl #2]	@ Store color at physical offset
-	add	offset, #1			@ Increment offset
-
-	@ Loop while inner count is < object width
-	add	r7, #1
-	cmp	r7, r2
-	blt	top4
-
-	@ Move offset to next line by adding screen width - object width
-	add	offset, r4
-	sub	offset, r2
-
-	@ Loop while outer count is not 0
-	subs	r3, #1
-	bne	top3
-
-	pop	{r4, r5, r6, r7}
-	bx	lr
-
-@ Data section
-.section .data
-
-.align
-.global frameBufferInfo
-frameBufferInfo:
-	.int	0		@ frame buffer pointer
-	.int	0		@ screen width
-	.int	0		@ screen height
-
-score:	.int	10
-lives:	.int	3
-
-@ window object
-window:
-	.int	500		@ x coordinate
-	.int	100		@ y coordinate
-	.int	600		@ width
-	.int	800		@ height
-	.int	0		@ Color (black)
-
-ball:
-	.int	ballX		@ x coordinate
-	.int	ballY		@ y coordinate
-	.int	ballWidth	@ width
-	.int	ballWidth	@ height
-.ascii "\000\000\000\377\000\000\000\377\000\000\000\377\000\000\000\377X}\346\377X}\346\377X}\346\377X}\346\377X}\346\377X}\346\377"
-.ascii "X}\346\377\000\000\000\377\000\000\000\377\000\000\000\377\000\000\000\377\000\000\000\377\000\000\000\377\000\000\000\377X}\346\377j\211\343\377"
-.ascii "j\211\343\377x\236\346\377x\236\346\377x\236\346\377x\236\346\377x\236\346\377X}\346\377\000\000\000\377\000\000\000\377\000\000\000\377"
-.ascii "\000\000\000\377\000\000\000\377Aa\277\377j\211\343\377j\211\343\377j\211\343\377x\236\346\377x\236\346\377x\236\346\377x\236\346\377"
-.ascii "\247\275\350\377x\236\346\377X}\346\377\000\000\000\377\000\000\000\377\000\000\000\377Aa\277\377j\211\343\377j\211\343\377j\211\343\377"
-.ascii "j\211\343\377x\236\346\377x\236\346\377x\236\346\377\247\275\350\377\247\275\350\377\247\275\350\377x\236\346\377X}\346\377\000\000\000\377"
-.ascii "Aa\277\377j\211\343\377j\211\343\377j\211\343\377j\211\343\377j\211\343\377x\236\346\377x\236\346\377x\236\346\377x\236\346\377"
-.ascii "\247\275\350\377\247\275\350\377\247\275\350\377x\236\346\377X}\346\377Aa\277\377j\211\343\377j\211\343\377j\211\343\377j\211\343\377"
-.ascii "j\211\343\377x\236\346\377x\236\346\377x\236\346\377x\236\346\377x\236\346\377\247\275\350\377x\236\346\377x\236\346\377X}\346\377"
-.ascii "Aa\277\377j\211\343\377j\211\343\377j\211\343\377j\211\343\377j\211\343\377j\211\343\377x\236\346\377x\236\346\377x\236\346\377"
-.ascii "x\236\346\377x\236\346\377x\236\346\377x\236\346\377X}\346\377Aa\277\377j\211\343\377j\211\343\377j\211\343\377j\211\343\377"
-.ascii "j\211\343\377j\211\343\377x\236\346\377x\236\346\377x\236\346\377x\236\346\377x\236\346\377x\236\346\377x\236\346\377X}\346\377"
-.ascii "Aa\277\377j\211\343\377j\211\343\377j\211\343\377j\211\343\377j\211\343\377j\211\343\377j\211\343\377x\236\346\377x\236\346\377"
-.ascii "x\236\346\377x\236\346\377x\236\346\377x\236\346\377X}\346\377Aa\277\377j\211\343\377j\211\343\377j\211\343\377j\211\343\377"
-.ascii "j\211\343\377j\211\343\377j\211\343\377j\211\343\377x\236\346\377x\236\346\377x\236\346\377x\236\346\377x\236\346\377X}\346\377"
-.ascii "Aa\277\377j\211\343\377j\211\343\377j\211\343\377j\211\343\377j\211\343\377j\211\343\377j\211\343\377j\211\343\377j\211\343\377"
-.ascii "x\236\346\377x\236\346\377x\236\346\377x\236\346\377X}\346\377\000\000\000\377Aa\277\377j\211\343\377j\211\343\377j\211\343\377"
-.ascii "j\211\343\377j\211\343\377j\211\343\377j\211\343\377j\211\343\377j\211\343\377j\211\343\377j\211\343\377X}\346\377\000\000\000\377"
-.ascii "\000\000\000\377\000\000\000\377Aa\277\377j\211\343\377j\211\343\377j\211\343\377j\211\343\377j\211\343\377j\211\343\377j\211\343\377"
-.ascii "j\211\343\377j\211\343\377X}\346\377\000\000\000\377\000\000\000\377\000\000\000\377\000\000\000\377\000\000\000\377Aa\277\377j\211\343\377"
-.ascii "j\211\343\377j\211\343\377j\211\343\377j\211\343\377j\211\343\377j\211\343\377X}\346\377\000\000\000\377\000\000\000\377\000\000\000\377"
-.ascii "\000\000\000\377\000\000\000\377\000\000\000\377\000\000\000\377Aa\277\377Aa\277\377Aa\277\377Aa\277\377Aa\277\377Aa\277\377"
-.ascii "Aa\277\377\000\000\000\377\000\000\000\377\000\000\000\377\000\000\000\377"
-
-paddle:
-	.int	padX		@ x coordinate
-	.int	padY		@ y coordinate
-	.int	padWidth	@ width
-	.int	padHeight	@ height
-	.int	0x800000	@ color ("maroon")
-
-
-@ Array of bricks
-bricks:	.rept	10		
-	.int	0		@ x coordinate
-	.int	0		@ y coordinate
-	.int	brickWidth	@ width
-	.int	brickHeight	@ height
-	.int	0xFF5733	@ Color (red)
-	.int	3		@ Health
-	.endr
-
-	.rept	10	
-	.int	0		@ x coordinate
-	.int	0		@ y coordinate
-	.int	brickWidth	@ width
-	.int	brickHeight	@ height
-	.int	0x3EF2F7	@ Color (blue)
-	.int	2		@ Health
-	.endr
-
-	.rept	10		
-	.int	0		@ x coordinate
-	.int	0		@ y coordinate
-	.int	brickWidth	@ width
-	.int	brickHeight	@ height
-	.int	0x87F36D	@ Color (green)
-	.int	1		@ Health
-	.endr
-endBricks:
-
-
 
 
 
