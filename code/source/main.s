@@ -198,7 +198,7 @@ processInput:
 	bl 	getBit
 
 	cmp 	r1, #0
-	beq	launchBall
+	bleq	launchBall
 	
 // Return to menu if so
 
