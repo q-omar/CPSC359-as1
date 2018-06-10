@@ -66,7 +66,6 @@ looptop:
 	bl	getInput
 	cmp	r0, #0
 	blne	processInput
-
 	bl	moveBall
 	
 	mov	r0, #5000		// Change to adjust game speed
@@ -77,6 +76,8 @@ looptop:
 	ldr	r0, [r0]
 	cmp	r0, #1
 	bleq	loseLife
+    cmp r3, #0
+    beq drawGameOver
 
 	b	looptop
 
@@ -247,15 +248,15 @@ loseLife:
 	cmp	r4, #0	
 	blne	resetPaddle
 
+    cmp	r4, #0	
+	blne	drawLives
+
 	cmp	r4, #0	
 	blne	resetBall
 
 	cmp	r4, #0	
-	blne	drawLives
-
-	cmp	r4, #0	
-	bleq	initGame	@ Otherwise game over*	
-
+	moveq r3, r4	@ Otherwise game over*	
+    movne r3, #1
 	pop	{r4, pc}
 
 @ Returns ball to starting location.
@@ -298,6 +299,12 @@ resetBall:
 	ldr	r0, =ballDir
 	mov	r1, #1
 	str	r1, [r0]
+    
+bPressed:
+	bl getInput	
+	mov r1, #0xfffe
+	cmp r0, r1
+	bne bPressed
 
 	pop	{pc}
 

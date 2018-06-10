@@ -5,7 +5,8 @@ menuControl:
 	push	{lr}
 	
 menuControlLoop:	
-
+	mov r0, #9999
+	bl	delayMicroseconds
 	bl	getInput		// read SNES input
 	mov r1, #0
 	teq	r0, r1			//no buttons pressed
@@ -28,6 +29,7 @@ menuControlLoop:
 		
 
 buttonEventA:
+
 	ldr		r0, =mainMenuSelected	//mainmenuselected is whats currently at main menu
 	ldr		r1, [r0]		
 	cmp		r1, #0					
@@ -49,6 +51,8 @@ selectionChanged:
 		
 
 menuConfirm:
+	mov	r0, #9999
+	bl delayMicroseconds
 	bl	getInput	// read from the controller
 	mov r1, #0
 	teq	r0, r1			// compare value when no buttons pressed to what we got from controller
