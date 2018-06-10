@@ -85,15 +85,73 @@ looptop:
 		b	haltLoop$
 
 loseLife:
+	push	{r4, lr}
+
 	ldr	r0, =lives
-	ldr	r1, [r0]
-	sub	r1, #1		@ Subtract one life
+	ldr	r4, [r0]
+	sub	r4, #1		@ Subtract one life
+	str	r4, [r0]
+
+	ldr	r0, =loss	@ Reset loss flag
+	mov	r1, #0
 	str	r1, [r0]
 
-	cmp	r1, #0
+	@ Reset ball and paddle to initial positions if
+	@ the game is still continuing
+	cmp	r4, #0	
+	blne	resetPaddle
 
-	bx	lr
+	cmp	r4, #0	
+	blne	resetBall
 
+	cmp	r4, #0	
+	blne	drawLives
+
+	cmp	r4, #0	
+	bleq	initGame	@ Otherwise game over*	
+
+	pop	{r4, pc}
+
+resetPaddle:
+	push	{lr}
+
+	@ Clear paddle
+	ldr	r0, =paddle
+	bl	clearObj
+
+	@ Center paddle in middle of window
+	ldr	r0, =paddle
+	mov	r1, #padX
+	str	r1, [r0]	// Store X coordinate
+
+	mov	r1, #padY
+	str	r1, [r0, #4]	// Store Y coordinate
+
+	bl	drawRect	// Draw paddle at initial coordinates
+
+	pop	{pc}
+
+resetBall:
+	push	{lr}
+
+	@ Clear ball
+	ldr	r0, =ball
+	bl	clearObj
+
+	ldr	r0, =ball
+	mov	r1, #ballX
+	str	r1, [r0]	// Store X coord
+
+	mov	r1, #ballY
+	str	r1, [r0, #4]	// Store Y coordinate
+	bl	drawImage
+
+	@ Reset direction of ball
+	ldr	r0, =ballDir
+	mov	r1, #1
+	str	r1, [r0]
+
+	pop	{pc}
 
 @ Sets the game to initial conditions (position of objects, # of lives, etc.)
 initGame:
@@ -120,24 +178,11 @@ initGame:
 	bl	resetBricks
 	bl	drawBricks
 
-	@ Center paddle in middle of window
-	ldr	r0, =paddle
-	mov	r1, #padX
-	str	r1, [r0]	// Store X coordinate
+	@ Reset paddle to initial location
+	bl	resetPaddle
 
-	mov	r1, #padY
-	str	r1, [r0, #4]	// Store Y coordinate
-
-	bl	drawRect	// Draw paddle at initial coordinates
-
-	@ Draws starting location of ball
-	ldr	r0, =ball
-	mov	r1, #ballX
-	str	r1, [r0]	// Store X coord
-
-	mov	r1, #ballY
-	str	r1, [r0, #4]	// Store Y coordinate
-	bl	drawImage
+	@ Reset ball to initial location
+	bl	resetBall
 
 	pop	{pc}
 	
@@ -420,9 +465,11 @@ moveBall:
 	ldr	r0, =ball
 	bl	drawImage	@ Redraw the moved ball
 
+	@ Check boundaries
 	bl	rightWall
 	bl	leftWall
 	bl	topWall
+	bl	bottomWall
 
 //	mov	r0, #10000		// Slight delay while progressing the ball
 //	bl	delayMicroseconds

@@ -31,12 +31,12 @@ drawQuitScreen:
 .global drawLives
 drawLives:
 	push	{lr}
-	numLives .req	r1
+	numberLives .req  r1
 	
 	ldr	r0, =lives
-	ldr	numLives, [r0]	@ Load current # of lives
+	ldr	numberLives, [r0]	@ Load current # of lives
 	ldr	r0, =digArray		@ r0 = base address of digit images array
-	ldr	r0, [r0, numLives, lsl #2]	@ r0 = address of correct digit image
+	ldr	r0, [r0, numberLives, lsl #2]	@ r0 = address of correct digit image
 
 	@ Set x coordinate where lives should display
 	mov	r2, #livesX
