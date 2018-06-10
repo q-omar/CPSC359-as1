@@ -29,13 +29,14 @@ brickStartY = topBound + 60
 @ Paddle starting parameters
 padWidth = 100
 padHeight = 30
-padX = windowX + windowWidth/2 - padWidth/2
-padY = lowerBound - 100
+padX = windowX + windowWidth/2 - padWidth/2   // 750
+padY = lowerBound - 100				// 800
 
 @ Ball starting parameters
 ballWidth = 15
-ballX = padX + padWidth/2 - ballWidth/2
-ballY = padY - ballWidth
+ballRad = ballWidth/2
+ballX = padX + padWidth/2 - ballWidth/2    // 793
+ballY = padY - ballWidth		// 793
 
 @ Score and lives x coordinates
 onesDigX = 750
@@ -61,7 +62,6 @@ menu:
 	bl	initGame
 
 looptop:
-
 	@ Check for user input
 	bl	getInput
 	cmp	r0, #0
@@ -84,6 +84,152 @@ looptop:
 	haltLoop$:
 		b	haltLoop$
 
+@ Checks for collisions between the ball and the paddle, and all bricks
+collisionCheck:
+	push	{lr}
+
+	ldr	r0, =paddle
+	bl	checkHit
+
+	pop	{pc}
+
+@ Detects collisions between the ball and rectangular objects.
+@ r0 - address of rectangular object to check
+checkHit:
+	push	{r4, r5, r6, r7, r8, r9, lr}
+
+	rectAdr		.req	r9
+	centerX		.req	r5
+	centerY		.req	r6
+	rectXNear	.req	r7
+	rectYNear	.req	r8
+
+	mov	rectAdr, r0		@ Save address of rectangle
+
+	@ Get x coordinate of center of ball
+	ldr	r1, =ball
+	ldr	centerX, [r1]		@ centerX = ball x coordinate
+	add	centerX, #ballRad	@ centerX = center x coord of ball
+
+	@ Get y coord of center of ball
+	ldr	centerY, [r1, #4]	@ centerX = ball y coordinate
+	add	centerY, #ballRad	@ centerX = center y coord of ball
+
+	@ Get X coordinate closest to center of ball
+	mov	r1, centerX
+	bl	nearestX
+	mov	rectXNear, r0
+
+	@ Get Y coordinate closest to center of ball
+	mov	r0, rectAdr
+	mov	r1, centerY
+	bl	nearestY
+	mov	rectYNear, r0
+
+	@ If distance from center of ball to both coordinates is < radius
+	@ confirm collision
+
+	@ Check difference between X points
+	cmp	centerX, rectXNear
+	sublt	r0, rectXNear, centerX
+	subge	r0, centerX, rectXNear	
+	
+	cmp	r0, #ballRad		@ If distance larger than radius, end checking
+	bgt	endChkHit
+
+	@ Check difference between Y points
+	cmp	centerY, rectYNear
+	sublt	r0, rectYNear, centerY
+	subge	r0, centerY, rectYNear	
+	
+	cmp	r0, #ballRad		@ If distance larger than radius, end checking
+	bgt	endChkHit
+
+	@ Collision was detected, determine direction to change ball	
+	mov	r0, r9
+	mov	r1, centerX
+	mov	r2, centerY
+	bl	checkSide
+
+	
+
+
+endChkHit:
+
+	pop	{r4, r5, r6, r7, r8, r9, pc}
+
+@ r0 - address of the rectangular object that has been collided with
+@ r1 - center X coordinate of ball
+@ r2 - center Y coordinate of ball
+@ Returns the side of the rectangle that was contacted
+@ 1 = top, 2 = right, 3 = bottom, 4 = left
+checkSide:
+	push	{r4, lr}
+
+	ldr	r3, [r0, #4]	@ r3 = top y coord of rect
+	cmp	r2, r3
+	movlt	r0, #1		@ if centerY < r3, ball is hitting top
+	blt	endSideChk
+
+	ldr	r4, [r0, #12]	@ r4 = height of rect
+	add	r3, r4		@ r3 = bottom y coord of rect
+	cmp	r2, r3
+	movgt	r0, #3		@ If center Y > r3, ball is hitting bottom
+	bgt	endSideChk
+
+	ldr	r3, [r0]	@ r3 = left x coord of rect
+	cmp	r1, r3		@ If center X < left X coord, ball is hitting left
+	movlt	r0, #4
+	movgt	r0, #2		@ Otherwise ball is hitting right
+
+endSideChk:
+	pop	{r4, pc}
+
+
+@ Finds closest x coordinate of a rectangular object to the center of the ball
+@ r0 - address of rectangular object to check
+@ r1 = x coord of center of ball
+nearestX:
+	push	{r4, r5, lr}
+
+	ldr	r2, [r0]	@ r2 = x coord of object
+	ldr	r3, [r0, #8]	@ r3 = width of object
+	add	r4, r2, r3	@ r4 = rightmost x coord of object
+
+	cmp	r1, r2
+	movlt	r0, r2			@ If center is < rect x coordinate, return rect x
+	blt	endNearX
+
+	cmp	r1, r4		@ If center is > rightmost side of rect, return rightmost X
+	movgt	r0, r4
+	movle	r0, r1
+
+endNearX:
+	pop	{r4, r5, pc}
+
+@ Finds closest x coordinate of a rectangular object to the center of the ball
+@ r0 - address of rectangular object to check
+@ r1 = y coord of center of ball
+nearestY:
+	push	{r4, r5, lr}
+
+	ldr	r2, [r0, #4]	@ r2 = y coord of object
+	ldr	r3, [r0, #12]	@ r3 = width of object
+	add	r4, r2, r3	@ r4 = bottom Y coord of object
+
+	cmp	r1, r2
+	movlt	r0, r2			@ If center is < rect y coordinate, return rect y
+	blt	endNearX
+
+	cmp	r1, r4		@ If center is > bottom side of rect, return bottom y
+	movgt	r0, r4
+	movle	r0, r1
+
+endNearY:
+	pop	{r4, r5, pc}
+
+@ Subtracts one of the player's lives and resets their
+@ paddle/ball.
 loseLife:
 	push	{r4, lr}
 
@@ -112,6 +258,7 @@ loseLife:
 
 	pop	{r4, pc}
 
+@ Returns ball to starting location.
 resetPaddle:
 	push	{lr}
 
@@ -131,6 +278,7 @@ resetPaddle:
 
 	pop	{pc}
 
+@ Returns paddle to starting location.
 resetBall:
 	push	{lr}
 
@@ -156,6 +304,7 @@ resetBall:
 @ Sets the game to initial conditions (position of objects, # of lives, etc.)
 initGame:
 	push	{lr}
+
 
 	@ Draws a black screen for the background
 	ldr	r0, =background
@@ -471,6 +620,9 @@ moveBall:
 	bl	topWall
 	bl	bottomWall
 
+	@ check for collisions
+	bl	collisionCheck
+
 //	mov	r0, #10000		// Slight delay while progressing the ball
 //	bl	delayMicroseconds
 	
@@ -482,7 +634,7 @@ moveBall:
 //	add	r7, r7, r5	@ r7 = x coordinate of right end of ball
 //	cmp	r7, r6
 //	blt	launchBall
-end2:
+
 	pop {r5, r6, r7, r8, r9, pc}
 	
 
