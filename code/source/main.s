@@ -66,16 +66,34 @@ looptop:
 	bl	getInput
 	cmp	r0, #0
 	blne	processInput
+
+	bl	moveBall
 	
-	
-	mov	r0, #2000		// Change to adjust game speed
+	mov	r0, #5000		// Change to adjust game speed
 	bl	delayMicroseconds
+
+	@ Check loss flag
+	ldr	r0, =loss
+	ldr	r0, [r0]
+	cmp	r0, #1
+	bleq	loseLife
 
 	b	looptop
 
 .global haltLoop$
 	haltLoop$:
 		b	haltLoop$
+
+loseLife:
+	ldr	r0, =lives
+	ldr	r1, [r0]
+	sub	r1, #1		@ Subtract one life
+	str	r1, [r0]
+
+	cmp	r1, #0
+
+	bx	lr
+
 
 @ Sets the game to initial conditions (position of objects, # of lives, etc.)
 initGame:
@@ -264,19 +282,30 @@ checkLaunch:
 	cmp 	r5, r6
 	bxne	lr
 
-launchBall:	
-	
-	push {r5, r6, r7, lr}
-	
-	ldr	r0, =ball	@ r0 = base address of ball
-	bl clearObj
-	
+bottomWall:
+
+	push	{r5, r6, r7, lr}
+
 	ldr	r0, =ball	@ r0 = base address of ball	
-	
-	@ Increment y- coordinate whenever B is pressed
-	ldr	r6, [r0, #4]	@ load y- coordinate of the ball
-	sub	r6, #1
-	str	r6, [r0, #4]
+
+	@ Check if the paddle is at bottom bound	
+	ldr	r5, [r0, #4]	@ r5 = y coordinate of ball
+	mov	r6, #lowerBound
+	ldr	r7, [r0, #12]	@ r7 = height of ball
+	add	r7, r7, r5	@ r7 = y coordinate of bottom of ball
+
+	@ Set loss flag if ball is past bottom boundary
+	cmp	r7, r6
+	ldrge	r0, =loss
+	movge	r1, #1
+	strge	r1, [r0]
+
+	pop	{r5, r6, r7, pc}
+
+rightWall:
+	push	{r5, r6, r7, lr}
+
+	ldr	r0, =ball	@ r0 = base address of ball	
 	
 	@ Check if the paddle is already at the right boundary	
 	ldr	r5, [r0]
@@ -284,25 +313,132 @@ launchBall:
 	ldr	r7, [r0, #8]	@ r7 = width of ball
 	add	r7, r7, r5	@ r7 = x coordinate of right end of ball
 
-	@ If the balls's right end is not at the boundary, move right
-	cmp	r7, r6		
-	addlt	r5, #1
-	str	r5, [r0]
-	bllt	drawImage	@ Redraw the moved ball
-
-	mov	r0, #10000		// Slight delay while progressing the ball
-	bl	delayMicroseconds
-	
-	@	check for right bound
-	ldr	r0, =ball	@ r0 = base address of ball	
-	mov	r6, #rightBound
-	ldr	r7, [r0, #8]	@ r7 = width of ball
-	ldr	r5, [r0]
-	add	r7, r7, r5	@ r7 = x coordinate of right end of ball
 	cmp	r7, r6
-	blt	launchBall
+	blt	dirElse1
+
+	ldr	r1, =ballDir
+	ldr	r3, [r1]
+	cmp	r3, #1
+	moveq	r2, #4
+
+	movne	r2, #3
+	str	r2, [r1]
+
+dirElse1:
+
+	pop	{r5, r6, r7, pc}
+
+leftWall:
+	push	{r5, r6, r7, lr}
+
+	ldr	r0, =ball	@ r0 = base address of ball	
+	
+	@ Check if the paddle is already at the left boundary	
+	ldr	r5, [r0]		@ r5 = x coordinate
+	mov	r6, #leftBound
+
+	cmp	r5, r6
+
+	bge	dirElse2
+
+	ldr	r1, =ballDir
+	ldr	r3, [r1]
+	cmp	r3, #3
+	moveq	r2, #2
+
+	movne	r2, #1
+	str	r2, [r1]
+
+dirElse2:
+	pop	{r5, r6, r7, pc}
+
+topWall:
+	push	{r5, r6, r7, lr}
+
+	ldr	r0, =ball	@ r0 = base address of ball	
+	
+	@ Check if the paddle is already at the right boundary	
+	ldr	r5, [r0, #4]	@ r5 = y coordinate of top of ball
+	mov	r6, #topBound
+
+	cmp	r5, r6
+
+	bge	dirElse3
+
+	ldr	r1, =ballDir
+	ldr	r3, [r1]
+	cmp	r3, #4
+	moveq	r2, #3
+
+	movne	r2, #2
+	str	r2, [r1]
+
+dirElse3:
+
+	pop	{r5, r6, r7, pc}
+
+moveBall:
+	push {r5, r6, r7, r8, r9, lr}
+
+	xSpeed	.req	r8
+	ySpeed	.req	r9
+
+	ldr	r5, =ballDir	@ Load direction of the ball
+	ldr	r5, [r5]	
+
+	@ Determine which direction to move the ball
+	cmp	r5, #1
+	moveq	xSpeed, #1
+	moveq	ySpeed, #-1
+
+	cmp	r5, #2
+	moveq	xSpeed, #1
+	moveq	ySpeed, #1
+
+	cmp	r5, #3
+	moveq	xSpeed, #-1
+	moveq	ySpeed, #1
+
+	cmp	r5, #4
+	moveq	xSpeed, #-1
+	moveq	ySpeed, #-1
+
+	@ If the balls's right end is not at the boundary, move right
+	ldr	r0, =ball	@ r0 = base address of ball
+	bl	clearObj
+
+	ldr	r0, =ball	@ r0 = base address of ball
+	ldr	r5, [r0]
+	add	r5, xSpeed
+	str	r5, [r0]
+
+	@ Increment y- coordinate whenever B is pressed
+	ldr	r6, [r0, #4]	@ load y- coordinate of the ball
+	add	r6, ySpeed
+	str	r6, [r0, #4]
+
+	ldr	r0, =ball
+	bl	drawImage	@ Redraw the moved ball
+
+	bl	rightWall
+	bl	leftWall
+	bl	topWall
+
+//	mov	r0, #10000		// Slight delay while progressing the ball
+//	bl	delayMicroseconds
+	
+//	@	check for right bound
+//	ldr	r0, =ball	@ r0 = base address of ball	
+//	mov	r6, #rightBound
+//	ldr	r7, [r0, #8]	@ r7 = width of ball
+//	ldr	r5, [r0]
+//	add	r7, r7, r5	@ r7 = x coordinate of right end of ball
+//	cmp	r7, r6
+//	blt	launchBall
 end2:
-	pop {r5, r6, r7, pc}
+	pop {r5, r6, r7, r8, r9, pc}
+	
+
 
 @ Sets the health of all the bricks to full.
 resetBricks:
