@@ -92,17 +92,16 @@ collisionCheck:
 	ldr	r0, =paddle
 	bl	checkHit
 
-/*	ldr	r4, =bricks
+	ldr	r4, =bricks
 	ldr	r5, =endBricks
 colLoop:
-
 
 	mov	r0, r4
 	bl	checkHit
 	add	r4, #brickSize
 
 	cmp	r4, r5
-	blt	colLoop */
+	blt	colLoop
 
 	pop	{r4, r5, pc}
 
@@ -179,8 +178,8 @@ checkHit:
 	bleq	bottomRect
 	
 	cmp	r4, #3
-	movne	r0, rectYNear	@ Else ball is bouncing bottom of a rectangle
-	blne	topWall
+	moveq	r0, rectYNear	@ Else ball is bouncing bottom of a rectangle
+	bleq	topWall
 
 endChkHit:
 	pop	{r4, r5, r6, r7, r8, r9, pc}
