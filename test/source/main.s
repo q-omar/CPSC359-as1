@@ -6,8 +6,9 @@
 @ Game board boundaries
 leftBound = 520
 rightBound = 1080
-topBound = 120
+topBound = 120		@ Where top wall ends
 lowerBound = 900
+gameTopBound = 180	@ Boundary for game
 
 @ Window parameters
 windowX = 500
@@ -18,24 +19,25 @@ windowHeight = 800
 @ Brick parameters
 bPerRow = 10			@ # of bricks per row
 numRows = 3			@ Number of rows of bricks
-brickWidth = 40
-brickHeight = 20
+brickWidth = 54
+brickHeight = 30
 brickSize = 24			@ Size of an individual brick in memory
-brickSpacing = 15		@ Distance (in pixels) between bricks
+brickSpacing = 2		@ Distance (in pixels) between bricks
 
-brickStartX = leftBound + 12
+brickStartX = leftBound
 brickStartY = topBound + 60
 
 @ Paddle starting parameters
 padWidth = 100
 padHeight = 30
-padX = windowX + windowWidth/2 - padWidth/2
-padY = lowerBound - 100
+padX = windowX + windowWidth/2 - padWidth/2   // 750
+padY = lowerBound - 100				// 800
 
 @ Ball starting parameters
 ballWidth = 15
-ballX = padX + padWidth/2 - ballWidth/2
-ballY = padY - ballWidth
+ballRad = ballWidth/2
+ballX = padX + padWidth/2 - ballWidth/2    // 793
+ballY = padY - ballWidth		// 793
 
 @ Score and lives x coordinates
 onesDigX = 750
@@ -52,28 +54,284 @@ main:
 
 	@ Initialize SNES controller
 	bl	initSNES
+	
+menu:
+	bl	drawMenu
+	bl 	menuControl
 
 	@ Initialize game
 	bl	initGame
 
 looptop:
-
 	@ Check for user input
 	bl	getInput
 	cmp	r0, #0
 	blne	processInput
 
-	mov	r0, #2000		// Change to adjust game speed
+	bl	moveBall
+	
+	mov	r0, #5000		// Change to adjust game speed
 	bl	delayMicroseconds
+
+	@ Check loss flag
+	ldr	r0, =loss
+	ldr	r0, [r0]
+	cmp	r0, #1
+	bleq	loseLife
 
 	b	looptop
 
+.global haltLoop$
 	haltLoop$:
 		b	haltLoop$
+
+@ Checks for collisions between the ball and the paddle, and all bricks
+collisionCheck:
+	push	{r4, r5, lr}
+
+	ldr	r0, =paddle
+	bl	checkHit
+
+/*	ldr	r4, =bricks
+	ldr	r5, =endBricks
+colLoop:
+
+
+	mov	r0, r4
+	bl	checkHit
+	add	r4, #brickSize
+
+	cmp	r4, r5
+	blt	colLoop */
+
+	pop	{r4, r5, pc}
+
+@ Detects collisions between the ball and rectangular objects.
+@ r0 - address of rectangular object to check
+checkHit:
+	push	{r4, r5, r6, r7, r8, r9, lr}
+
+	rectAdr		.req	r9
+	centerX		.req	r5
+	centerY		.req	r6
+	rectXNear	.req	r7
+	rectYNear	.req	r8
+
+	mov	rectAdr, r0		@ Save address of rectangle
+
+	@ Get x coordinate of center of ball
+	ldr	r1, =ball
+	ldr	centerX, [r1]		@ centerX = ball x coordinate
+	add	centerX, #ballRad	@ centerX = center x coord of ball
+
+	@ Get y coord of center of ball
+	ldr	centerY, [r1, #4]	@ centerX = ball y coordinate
+	add	centerY, #ballRad	@ centerX = center y coord of ball
+
+	@ Get X coordinate closest to center of ball
+	mov	r1, centerX
+	bl	nearestX
+	mov	rectXNear, r0
+
+	@ Get Y coordinate closest to center of ball
+	mov	r0, rectAdr
+	mov	r1, centerY
+	bl	nearestY
+	mov	rectYNear, r0
+
+	@ If distance from center of ball to both coordinates is < radius
+	@ confirm collision
+
+	@ Check difference between X points
+	cmp	centerX, rectXNear
+	sublt	r0, rectXNear, centerX
+	subge	r0, centerX, rectXNear	
+	
+	cmp	r0, #ballRad		@ If distance larger than radius, end checking
+	bgt	endChkHit
+
+	@ Check difference between Y points
+	cmp	centerY, rectYNear
+	sublt	r0, rectYNear, centerY
+	subge	r0, centerY, rectYNear	
+	
+	cmp	r0, #ballRad		@ If distance larger than radius, end checking
+	bgt	endChkHit
+
+	@ Collision was detected, determine direction to change ball	
+	mov	r0, r9		@ Set r0 to rect address
+	mov	r1, centerX
+	mov	r2, centerY
+	bl	checkSide
+
+	mov	r4, r0		@ Store side that was hit
+
+	cmp	r4, #2		@ If ball is bouncing the right wall
+	moveq	r0, rectXNear
+	bleq	leftWall
+
+	cmp	r4, #4		@ If ball is bouncing the left wall
+	moveq	r0, rectXNear
+	bleq	rightWall
+
+	cmp	r4, #1		@ If ball is bouncing the top side
+	moveq	r0, rectYNear
+	bleq	bottomRect
+	
+	cmp	r4, #3
+	movne	r0, rectYNear	@ Else ball is bouncing bottom of a rectangle
+	blne	topWall
+
+endChkHit:
+	pop	{r4, r5, r6, r7, r8, r9, pc}
+
+@ r0 - address of the rectangular object that has been collided with
+@ r1 - center X coordinate of ball
+@ r2 - center Y coordinate of ball
+@ Returns the side of the rectangle that was contacted
+@ 1 = top, 2 = right, 3 = bottom, 4 = left
+checkSide:
+	push	{r4, lr}
+
+	ldr	r3, [r0, #4]	@ r3 = top y coord of rect
+	cmp	r2, r3
+	movlt	r0, #1		@ if centerY < r3, ball is hitting top
+	blt	endSideChk
+
+	ldr	r4, [r0, #12]	@ r4 = height of rect
+	add	r3, r4		@ r3 = bottom y coord of rect
+	cmp	r2, r3
+	movgt	r0, #3		@ If center Y > r3, ball is hitting bottom
+	bgt	endSideChk
+
+	ldr	r3, [r0]	@ r3 = left x coord of rect
+	cmp	r1, r3		@ If center X < left X coord, ball is hitting left
+	movlt	r0, #4
+	movgt	r0, #2		@ Otherwise ball is hitting right
+
+endSideChk:
+	pop	{r4, pc}
+
+
+@ Finds closest x coordinate of a rectangular object to the center of the ball
+@ r0 - address of rectangular object to check
+@ r1 = x coord of center of ball
+nearestX:
+	push	{r4, r5, lr}
+
+	ldr	r2, [r0]	@ r2 = x coord of object
+	ldr	r3, [r0, #8]	@ r3 = width of object
+	add	r4, r2, r3	@ r4 = rightmost x coord of object
+
+	cmp	r1, r2
+	movlt	r0, r2			@ If center is < rect x coordinate, return rect x
+	blt	endNearX
+
+	cmp	r1, r4		@ If center is > rightmost side of rect, return rightmost X
+	movgt	r0, r4
+	movle	r0, r1
+
+endNearX:
+	pop	{r4, r5, pc}
+
+@ Finds closest x coordinate of a rectangular object to the center of the ball
+@ r0 - address of rectangular object to check
+@ r1 = y coord of center of ball
+nearestY:
+	push	{r4, r5, lr}
+
+	ldr	r2, [r0, #4]	@ r2 = y coord of object
+	ldr	r3, [r0, #12]	@ r3 = width of object
+	add	r4, r2, r3	@ r4 = bottom Y coord of object
+
+	cmp	r1, r2
+	movlt	r0, r2			@ If center is < rect y coordinate, return rect y
+	blt	endNearX
+
+	cmp	r1, r4		@ If center is > bottom side of rect, return bottom y
+	movgt	r0, r4
+	movle	r0, r1
+
+endNearY:
+	pop	{r4, r5, pc}
+
+@ Subtracts one of the player's lives and resets their
+@ paddle/ball.
+loseLife:
+	push	{r4, lr}
+
+	ldr	r0, =lives
+	ldr	r4, [r0]
+	sub	r4, #1		@ Subtract one life
+	str	r4, [r0]
+
+	ldr	r0, =loss	@ Reset loss flag
+	mov	r1, #0
+	str	r1, [r0]
+
+	@ Reset ball and paddle to initial positions if
+	@ the game is still continuing
+	cmp	r4, #0	
+	blne	resetPaddle
+
+	cmp	r4, #0	
+	blne	resetBall
+
+	cmp	r4, #0	
+	blne	drawLives
+
+	cmp	r4, #0	
+	bleq	initGame	@ Otherwise game over*	
+
+	pop	{r4, pc}
+
+@ Returns ball to starting location.
+resetPaddle:
+	push	{lr}
+
+	@ Clear paddle
+	ldr	r0, =paddle
+	bl	clearObj
+
+	@ Center paddle in middle of window
+	ldr	r0, =paddle
+	mov	r1, #padX
+	str	r1, [r0]	// Store X coordinate
+
+	mov	r1, #padY
+	str	r1, [r0, #4]	// Store Y coordinate
+
+	bl	drawRect	// Draw paddle at initial coordinates
+
+	pop	{pc}
+
+@ Returns paddle to starting location.
+resetBall:
+	push	{lr}
+
+	@ Clear ball
+	ldr	r0, =ball
+	bl	clearObj
+
+	ldr	r0, =ball
+	mov	r1, #ballX
+	str	r1, [r0]	// Store X coord
+
+	mov	r1, #ballY
+	str	r1, [r0, #4]	// Store Y coordinate
+	bl	drawImage
+
+	@ Reset direction of ball
+	ldr	r0, =ballDir
+	mov	r1, #1
+	str	r1, [r0]
+
+	pop	{pc}
 
 @ Sets the game to initial conditions (position of objects, # of lives, etc.)
 initGame:
 	push	{lr}
+
 
 	@ Draws a black screen for the background
 	ldr	r0, =background
@@ -96,85 +354,13 @@ initGame:
 	bl	resetBricks
 	bl	drawBricks
 
-	@ Center paddle in middle of window
-	ldr	r0, =paddle
-	mov	r1, #padX
-	str	r1, [r0]	// Store X coordinate
+	@ Reset paddle to initial location
+	bl	resetPaddle
 
-	mov	r1, #padY
-	str	r1, [r0, #4]	// Store Y coordinate
-
-	bl	drawRect	// Draw paddle at initial coordinates
-
-	@ Draws starting location of ball
-	ldr	r0, =ball
-	mov	r1, #ballX
-	str	r1, [r0]	// Store X coord
-
-	mov	r1, #ballY
-	str	r1, [r0, #4]	// Store Y coordinate
-	bl	drawImage
+	@ Reset ball to initial location
+	bl	resetBall
 
 	pop	{pc}
-	
-@ Draws the current number of lives onto the screen.
-drawLives:
-	push	{lr}
-
-	numLives .req	r1
-	
-	ldr	r0, =lives
-	ldr	numLives, [r0]	@ Load current # of lives
-
-	ldr	r0, =digArray		@ r0 = base address of digit images array
-	ldr	r0, [r0, numLives, lsl #2]	@ r0 = address of correct digit image
-
-	@ Set x coordinate where lives should display
-	mov	r2, #livesX
-	str	r2, [r0]
-
-	bl	drawImage	@ Draw lives
-
-	pop	{pc}
-
-
-@ Draws the current score onto the screen.
-drawScore:
-	push	{r4, r5, r6, lr}
-
-	curScore 	.req	r4	@ Name current score register
-	scoreOverTen	.req	r6
-
-	@ Load current score
-	ldr	r0, =score
-	ldr	curScore, [r0]
-	
-	@ Check the tens digit of the score
-	mov	r1, #10
-	udiv	scoreOverTen, curScore, r1	@ r6 = score/10
-
-	@ Load address of image for digit
-	ldr	r5, =digArray		@ r5 = base address of digit images array
-	ldr	r0, [r5, scoreOverTen, lsl #2]	@ r0 = address of correct image
-
-	@ Set x coordinate for digit
-	mov	r2, #tensDigX
-	str	r2, [r0]
-
-	@ Draw tens digit
-	bl	drawImage
-
-	@ Check the ones digit of the score
-	mov	r1, #10
-	mul	r1, scoreOverTen	@ r1 = score/10 * 10
-	sub	curScore, r1
-
-	ldr	r0, [r5, curScore, lsl #2]	@ r0 = address of ones digit image
-	mov	r2, #onesDigX		@ r2 = x coordinate for ones digit
-	str	r2, [r0]
-	bl	drawImage		@ Draw ones digit
-
-	pop	{r4, r5, r6, pc}
 	
 
 //----------------------------------------------------------------------------
@@ -185,27 +371,28 @@ drawScore:
 //Return:
 //r1 - the desired bit
 
-.globl      getBit
+.global      getBit
 getBit:
+
     mov     r2, #1          // r2 = b(...00001)
-sub r1, #1
+    sub r1, #1
     mov     r2, r2, lsl r1  // left shift r2 by r1
     and     r1, r0, r2      // r1: AND r0 with r2 to select only desired bit
     bx      lr              // return
 
 @ Receives pressed button from SNES controller and updates the game state appropriately.
-@ r0 - number of the button pressed
+@ r0 - number of the button pressedbleq
 processInput:
 	push	{r4, r5, lr}
 
 	mov	r4, r0		// Save pressed buttons to r4
 
 	@ Check if A is pressed
-	mov	r0, r4
-	mov	r1, #9
-	bl	getBit
+	mov		r0, r4
+	mov		r1, #9
+	bl		getBit
 
-	cmp	r1, #0
+	cmp		r1, #0
 	moveq	r5, #1		// Set speed flag if A is pressed
 	movne	r5, #0
 
@@ -214,31 +401,43 @@ processInput:
 	mov	r1, #7
 	bl	getBit
 
-	cmp	r1, #0
+	cmp		r1, #0
 	moveq	r0, #7
 	moveq	r1, r5
 	bleq	movePaddle
 
 	@ Check if right joypad is pressed
-	mov	r0, r4
-	mov	r1, #8
-	bl	getBit
+	mov		r0, r4
+	mov		r1, #8
+	bl		getBit
 
-	cmp	r1, #0
+	cmp		r1, #0
 	moveq	r0, #8
 	moveq	r1, r5
 	bleq	movePaddle
 
 	@ Check if Start is pressed
-	mov	r0, r4
-	mov	r1, #4
-	bl	getBit
-	cmp	r1, #0		// If Start is pressed, reset game
+	mov		r0, r4
+	mov		r1, #4
+	bl		getBit
+	cmp		r1, #0		// If Start is pressed, reset game
 	bleq	initGame
 
 	@ Check if Select is pressed
-	mov	r0, r4
-	mov	r1, #3
+	mov		r0, r4
+	mov		r1, #3
+	bl		getBit
+	cmp		r1, #0		// If select is pressed, go back to main menu 
+	beq		main
+
+	@ Check if B is pressed
+	mov		r0, r4
+	mov 	r1, #1
+	bl 		getBit
+
+	cmp 	r1, #0
+	bleq	checkLaunch
+	
 // Return to menu if so
 
 
@@ -287,8 +486,210 @@ leftmov:
 	subgt	r5, r8		@ If not out of bounds, move left
 	strgt	r5, [r0]	@ Store new x-coordinate
 	bl	drawRect	@ Redraw the moved paddle
+	
 end1:
 	pop	{r4, r5, r6, r7, r8, pc}
+
+checkLaunch:
+
+	ldr	r0, =ball	@ r0 = base address of ball	
+	mov 	r6, #ballX
+	ldr		r5, [r0]
+	cmp 	r5, r6
+	bxne	lr
+
+	mov 	r6, #ballY
+	ldr		r5, [r0, #4]
+	cmp 	r5, r6
+	bxne	lr
+
+@ Changes direction of ball after collision with a wall below the ball
+@ r0 - y-coordinate representing the wall
+bottomRect:
+	push	{lr}
+
+	ldr	r1, =ballDir	
+	ldr	r3, [r1]	@ r3 = direction of ball
+	cmp	r3, #3
+	moveq	r2, #4
+
+	movne	r2, #1
+	str	r2, [r1]
+
+	pop	{pc}
+
+
+bottomWall:
+
+	push	{r5, r6, r7, lr}
+
+	ldr	r0, =ball	@ r0 = base address of ball	
+
+	@ Check if the paddle is at bottom bound	
+	ldr	r5, [r0, #4]	@ r5 = y coordinate of ball
+	mov	r6, #lowerBound
+	ldr	r7, [r0, #12]	@ r7 = height of ball
+	add	r7, r7, r5	@ r7 = y coordinate of bottom of ball
+
+	@ Set loss flag if ball is past bottom boundary
+	cmp	r7, r6
+	ldrge	r0, =loss
+	movge	r1, #1
+	strge	r1, [r0]
+
+	pop	{r5, r6, r7, pc}
+
+
+@ Changes direction of ball after collision with a wall to the right of the ball
+@ r0 - x-coordinate representing the wall
+rightWall:
+	push	{r5, r6, r7, lr}
+
+	ldr	r2, =ball	@ r2 = base address of ball	
+	
+	@ Check if the paddle is already at the right boundary	
+	ldr	r5, [r2]
+	mov	r6, r0
+	ldr	r7, [r2, #8]	@ r7 = width of ball
+	add	r7, r7, r5	@ r7 = x coordinate of right end of ball
+
+	cmp	r7, r6
+	blt	dirElse1
+
+	ldr	r1, =ballDir
+	ldr	r3, [r1]
+	cmp	r3, #1
+	moveq	r2, #4
+
+	movne	r2, #3
+	str	r2, [r1]
+
+dirElse1:
+	pop	{r5, r6, r7, pc}
+
+@ Changes direction of ball after collision with a wall to the left of the ball
+@ r0 - x-coordinate representing the wall
+leftWall:
+	push	{r5, r6, r7, lr}
+
+	ldr	r2, =ball	@ r2 = base address of ball	
+	
+	@ Check if the paddle is already at the left boundary	
+	ldr	r5, [r2]		@ r5 = x coordinate
+	mov	r6, r0
+
+	cmp	r5, r6
+
+	bge	dirElse2
+
+	ldr	r1, =ballDir
+	ldr	r3, [r1]
+	cmp	r3, #3
+	moveq	r2, #2
+
+	movne	r2, #1
+	str	r2, [r1]
+
+dirElse2:
+	pop	{r5, r6, r7, pc}
+
+@ r0 - y coordinate of wall to check
+topWall:
+	push	{r5, r6, r7, lr}
+
+	ldr	r2, =ball	@ r2 = base address of ball	
+	
+	@ Check if the paddle is already at the right boundary	
+	ldr	r5, [r2, #4]	@ r5 = y coordinate of top of ball
+	mov	r6, r0		@ r0 = top boundary
+
+	cmp	r5, r6
+
+	bge	dirElse3
+
+	ldr	r1, =ballDir
+	ldr	r3, [r1]
+	cmp	r3, #4
+	moveq	r2, #3
+
+	movne	r2, #2
+	str	r2, [r1]
+
+dirElse3:
+	pop	{r5, r6, r7, pc}
+
+moveBall:
+	push {r5, r6, r7, r8, r9, lr}
+
+	xSpeed	.req	r8
+	ySpeed	.req	r9
+
+	ldr	r5, =ballDir	@ Load direction of the ball
+	ldr	r5, [r5]	
+
+	@ Determine which direction to move the ball
+	cmp	r5, #1
+	moveq	xSpeed, #1
+	moveq	ySpeed, #-1
+
+	cmp	r5, #2
+	moveq	xSpeed, #1
+	moveq	ySpeed, #1
+
+	cmp	r5, #3
+	moveq	xSpeed, #-1
+	moveq	ySpeed, #1
+
+	cmp	r5, #4
+	moveq	xSpeed, #-1
+	moveq	ySpeed, #-1
+
+	@ If the balls's right end is not at the boundary, move right
+	ldr	r0, =ball	@ r0 = base address of ball
+	bl	clearObj
+
+	ldr	r0, =ball	@ r0 = base address of ball
+	ldr	r5, [r0]
+	add	r5, xSpeed
+	str	r5, [r0]
+
+	@ Increment y- coordinate whenever B is pressed
+	ldr	r6, [r0, #4]	@ load y- coordinate of the ball
+	add	r6, ySpeed
+	str	r6, [r0, #4]
+
+	ldr	r0, =ball
+	bl	drawImage	@ Redraw the moved ball
+
+	@ Check boundaries
+	mov	r0, #rightBound
+	bl	rightWall
+
+	mov	r0, #leftBound
+	bl	leftWall
+
+	mov	r0, #gameTopBound
+	bl	topWall
+
+	bl	bottomWall
+
+	@ check for collisions
+	bl	collisionCheck
+
+//	mov	r0, #10000		// Slight delay while progressing the ball
+//	bl	delayMicroseconds
+	
+//	@	check for right bound
+//	ldr	r0, =ball	@ r0 = base address of ball	
+//	mov	r6, #rightBound
+//	ldr	r7, [r0, #8]	@ r7 = width of ball
+//	ldr	r5, [r0]
+//	add	r7, r7, r5	@ r7 = x coordinate of right end of ball
+//	cmp	r7, r6
+//	blt	launchBall
+
+	pop {r5, r6, r7, r8, r9, pc}
+	
 
 
 @ Sets the health of all the bricks to full.
@@ -312,24 +713,7 @@ inner2: @ Inner loop runs once for each brick in a row
 	bx	lr
 
 
-@ Loops through the brick array to draw all the bricks on screen.
-drawBricks:
-	push	{r4, r5, lr}
 
-	@ Load base address for bricks
-	ldr	r4, =bricks
-	ldr	r5, =endBricks
-
-drawtop:
-	mov	r0, r4
-	bl	drawRect
-	add	r4, #brickSize
-	
-	@ Check if current address is past end of array
-	cmp	r4, r5
-	blt	drawtop
-
-	pop	{r4, r5, pc}
 
 @ Sets the coordinates for all the bricks.
 initBricks:
@@ -432,201 +816,3 @@ top6:	@ Inner loop runs <object width> times, drawing 1
 
 	pop	{r4, r5, r6}
 	bx	lr
-
-
-@ Draws a solid, coloured rectangle.
-@ r0 - address of rectangular object to draw
-drawRect:
-	push	{r4, r5, r6}
-	offset	.req	r6
-
-	ldr	r1, =frameBufferInfo
-	ldr	r2, [r0]	@ r2 = x coordinate of object
-	ldr	r3, [r0, #4]	@ r3 = y coordinate
-	ldr	r4, [r1, #4]	@ r4 = screen width
-	ldr	r5, [r0, #16]	@ r5 = object colour
-
-	@ Calculate initial offset
-	mul	r3, r4		@ r1 = y * width
-	add	offset, r2, r3
-
-	ldr	r1, [r1]	@ r1 = frame buffer pointer
-	ldr	r2, [r0, #8]	@ r2 = width of object
-	ldr	r3, [r0, #12]	@ r3 = height of object
-
-	@ Outer loop runs <object height> times, drawing
-	@ one horizontal line each time
-top1:	
-	@ Initialize counter for inner loop
-	mov	r0, #0
-
-top2:	@ Inner loop runs <object width> times, drawing 1
-	@ pixel each time
-
-	str	r5, [r1, offset, lsl #2]	@ Store color at physical offset
-	add	offset, #1			@ Increment offset
-
-	@ Loop while inner count is < object width
-	add	r0, #1
-	cmp	r0, r2
-	blt	top2
-
-	@ Move offset to next line by adding screen width - object width
-	add	offset, r4
-	sub	offset, r2
-
-	@ Loop while outer count is not 0
-	subs	r3, #1
-	bne	top1
-
-	pop	{r4, r5, r6}
-	bx	lr
-
-@ Draws an image using bitmap data.
-@ r0 - address of image object
-drawImage:
-	push	{r4, r5, r6, r7}
-	offset	.req	r6
-
-	ldr	r1, =frameBufferInfo
-	ldr	r2, [r0]	@ r2 = x coordinate of object
-	ldr	r3, [r0, #4]	@ r3 = y coordinate
-	ldr	r4, [r1, #4]	@ r4 = screen width
-
-	@ Calculate initial offset
-	mul	r3, r4		@ r1 = y * width
-	add	offset, r2, r3
-
-	ldr	r1, [r1]	@ r1 = frame buffer pointer
-	ldr	r2, [r0, #8]	@ r2 = width of object
-	ldr	r3, [r0, #12]	@ r3 = height of object
-	add	r5, r0, #16	@ r5 = address of image data
-
-	@ Outer loop runs <object height> times, drawing
-	@ one horizontal line each time
-top3:	
-	@ Initialize counter for inner loop
-	mov	r7, #0
-
-top4:	@ Inner loop runs <object width> times, drawing 1
-	@ pixel each time
-	ldr	r0, [r5], #4			@ Load image data and update address
-	str	r0, [r1, offset, lsl #2]	@ Store color at physical offset
-	add	offset, #1			@ Increment offset
-
-	@ Loop while inner count is < object width
-	add	r7, #1
-	cmp	r7, r2
-	blt	top4
-
-	@ Move offset to next line by adding screen width - object width
-	add	offset, r4
-	sub	offset, r2
-
-	@ Loop while outer count is not 0
-	subs	r3, #1
-	bne	top3
-
-	pop	{r4, r5, r6, r7}
-	bx	lr
-
-@ Data section
-.section .data
-
-.align
-.global frameBufferInfo
-frameBufferInfo:
-	.int	0		@ frame buffer pointer
-	.int	0		@ screen width
-	.int	0		@ screen height
-
-score:	.int	0
-lives:	.int	numLives
-
-@ window object
-window:
-	.int	500		@ x coordinate
-	.int	100		@ y coordinate
-	.int	600		@ width
-	.int	800		@ height
-	.int	0		@ Color (black)
-
-ball:
-	.int	ballX		@ x coordinate
-	.int	ballY		@ y coordinate
-	.int	ballWidth	@ width
-	.int	ballWidth	@ height
-.ascii "\000\000\000\377\000\000\000\377\000\000\000\377\000\000\000\377X}\346\377X}\346\377X}\346\377X}\346\377X}\346\377X}\346\377"
-.ascii "X}\346\377\000\000\000\377\000\000\000\377\000\000\000\377\000\000\000\377\000\000\000\377\000\000\000\377\000\000\000\377X}\346\377j\211\343\377"
-.ascii "j\211\343\377x\236\346\377x\236\346\377x\236\346\377x\236\346\377x\236\346\377X}\346\377\000\000\000\377\000\000\000\377\000\000\000\377"
-.ascii "\000\000\000\377\000\000\000\377Aa\277\377j\211\343\377j\211\343\377j\211\343\377x\236\346\377x\236\346\377x\236\346\377x\236\346\377"
-.ascii "\247\275\350\377x\236\346\377X}\346\377\000\000\000\377\000\000\000\377\000\000\000\377Aa\277\377j\211\343\377j\211\343\377j\211\343\377"
-.ascii "j\211\343\377x\236\346\377x\236\346\377x\236\346\377\247\275\350\377\247\275\350\377\247\275\350\377x\236\346\377X}\346\377\000\000\000\377"
-.ascii "Aa\277\377j\211\343\377j\211\343\377j\211\343\377j\211\343\377j\211\343\377x\236\346\377x\236\346\377x\236\346\377x\236\346\377"
-.ascii "\247\275\350\377\247\275\350\377\247\275\350\377x\236\346\377X}\346\377Aa\277\377j\211\343\377j\211\343\377j\211\343\377j\211\343\377"
-.ascii "j\211\343\377x\236\346\377x\236\346\377x\236\346\377x\236\346\377x\236\346\377\247\275\350\377x\236\346\377x\236\346\377X}\346\377"
-.ascii "Aa\277\377j\211\343\377j\211\343\377j\211\343\377j\211\343\377j\211\343\377j\211\343\377x\236\346\377x\236\346\377x\236\346\377"
-.ascii "x\236\346\377x\236\346\377x\236\346\377x\236\346\377X}\346\377Aa\277\377j\211\343\377j\211\343\377j\211\343\377j\211\343\377"
-.ascii "j\211\343\377j\211\343\377x\236\346\377x\236\346\377x\236\346\377x\236\346\377x\236\346\377x\236\346\377x\236\346\377X}\346\377"
-.ascii "Aa\277\377j\211\343\377j\211\343\377j\211\343\377j\211\343\377j\211\343\377j\211\343\377j\211\343\377x\236\346\377x\236\346\377"
-.ascii "x\236\346\377x\236\346\377x\236\346\377x\236\346\377X}\346\377Aa\277\377j\211\343\377j\211\343\377j\211\343\377j\211\343\377"
-.ascii "j\211\343\377j\211\343\377j\211\343\377j\211\343\377x\236\346\377x\236\346\377x\236\346\377x\236\346\377x\236\346\377X}\346\377"
-.ascii "Aa\277\377j\211\343\377j\211\343\377j\211\343\377j\211\343\377j\211\343\377j\211\343\377j\211\343\377j\211\343\377j\211\343\377"
-.ascii "x\236\346\377x\236\346\377x\236\346\377x\236\346\377X}\346\377\000\000\000\377Aa\277\377j\211\343\377j\211\343\377j\211\343\377"
-.ascii "j\211\343\377j\211\343\377j\211\343\377j\211\343\377j\211\343\377j\211\343\377j\211\343\377j\211\343\377X}\346\377\000\000\000\377"
-.ascii "\000\000\000\377\000\000\000\377Aa\277\377j\211\343\377j\211\343\377j\211\343\377j\211\343\377j\211\343\377j\211\343\377j\211\343\377"
-.ascii "j\211\343\377j\211\343\377X}\346\377\000\000\000\377\000\000\000\377\000\000\000\377\000\000\000\377\000\000\000\377Aa\277\377j\211\343\377"
-.ascii "j\211\343\377j\211\343\377j\211\343\377j\211\343\377j\211\343\377j\211\343\377X}\346\377\000\000\000\377\000\000\000\377\000\000\000\377"
-.ascii "\000\000\000\377\000\000\000\377\000\000\000\377\000\000\000\377Aa\277\377Aa\277\377Aa\277\377Aa\277\377Aa\277\377Aa\277\377"
-.ascii "Aa\277\377\000\000\000\377\000\000\000\377\000\000\000\377\000\000\000\377"
-
-paddle:
-	.int	padX		@ x coordinate
-	.int	padY		@ y coordinate
-	.int	padWidth	@ width
-	.int	padHeight	@ height
-	.int	0x800000	@ color ("maroon")
-
-
-@ Array of bricks
-bricks:	.rept	10		
-	.int	0		@ x coordinate
-	.int	0		@ y coordinate
-	.int	brickWidth	@ width
-	.int	brickHeight	@ height
-	.int	0xFF5733	@ Color (red)
-	.int	3		@ Health
-	.endr
-
-	.rept	10	
-	.int	0		@ x coordinate
-	.int	0		@ y coordinate
-	.int	brickWidth	@ width
-	.int	brickHeight	@ height
-	.int	0x3EF2F7	@ Color (blue)
-	.int	2		@ Health
-	.endr
-
-	.rept	10		
-	.int	0		@ x coordinate
-	.int	0		@ y coordinate
-	.int	brickWidth	@ width
-	.int	brickHeight	@ height
-	.int	0x87F36D	@ Color (green)
-	.int	1		@ Health
-	.endr
-endBricks:
-
-
-
-
-
-
-
-
-
-
-
-
-
-	
