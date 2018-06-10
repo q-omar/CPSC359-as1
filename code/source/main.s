@@ -66,7 +66,8 @@ looptop:
 	bl	getInput
 	cmp	r0, #0
 	blne	processInput
-
+	
+	
 	mov	r0, #2000		// Change to adjust game speed
 	bl	delayMicroseconds
 
@@ -123,9 +124,6 @@ initGame:
 	pop	{pc}
 	
 
-
-	
-
 //----------------------------------------------------------------------------
 //Returns the bit at a given index of a 16-bit integer
 //Args:
@@ -136,8 +134,9 @@ initGame:
 
 .global      getBit
 getBit:
+
     mov     r2, #1          // r2 = b(...00001)
-sub r1, #1
+    sub r1, #1
     mov     r2, r2, lsl r1  // left shift r2 by r1
     and     r1, r0, r2      // r1: AND r0 with r2 to select only desired bit
     bx      lr              // return
@@ -150,11 +149,11 @@ processInput:
 	mov	r4, r0		// Save pressed buttons to r4
 
 	@ Check if A is pressed
-	mov	r0, r4
-	mov	r1, #9
-	bl	getBit
+	mov		r0, r4
+	mov		r1, #9
+	bl		getBit
 
-	cmp	r1, #0
+	cmp		r1, #0
 	moveq	r5, #1		// Set speed flag if A is pressed
 	movne	r5, #0
 
@@ -163,42 +162,42 @@ processInput:
 	mov	r1, #7
 	bl	getBit
 
-	cmp	r1, #0
+	cmp		r1, #0
 	moveq	r0, #7
 	moveq	r1, r5
 	bleq	movePaddle
 
 	@ Check if right joypad is pressed
-	mov	r0, r4
-	mov	r1, #8
-	bl	getBit
+	mov		r0, r4
+	mov		r1, #8
+	bl		getBit
 
-	cmp	r1, #0
+	cmp		r1, #0
 	moveq	r0, #8
 	moveq	r1, r5
 	bleq	movePaddle
 
 	@ Check if Start is pressed
-	mov	r0, r4
-	mov	r1, #4
-	bl	getBit
-	cmp	r1, #0		// If Start is pressed, reset game
+	mov		r0, r4
+	mov		r1, #4
+	bl		getBit
+	cmp		r1, #0		// If Start is pressed, reset game
 	bleq	initGame
 
 	@ Check if Select is pressed
-	mov	r0, r4
-	mov	r1, #3
-	bl	getBit
-	cmp	r1, #0		// If select is pressed, go back to main menu 
-	beq	main
+	mov		r0, r4
+	mov		r1, #3
+	bl		getBit
+	cmp		r1, #0		// If select is pressed, go back to main menu 
+	beq		main
 
 	@ Check if B is pressed
-	mov 	r0, r4
+	mov		r0, r4
 	mov 	r1, #1
-	bl 	getBit
+	bl 		getBit
 
 	cmp 	r1, #0
-	bleq	launchBall
+	bleq	checkLaunch
 	
 // Return to menu if so
 
@@ -248,11 +247,25 @@ leftmov:
 	subgt	r5, r8		@ If not out of bounds, move left
 	strgt	r5, [r0]	@ Store new x-coordinate
 	bl	drawRect	@ Redraw the moved paddle
+	
 end1:
 	pop	{r4, r5, r6, r7, r8, pc}
 
-launchBall:
+checkLaunch:
 
+	ldr		r0, =ball	@ r0 = base address of ball	
+	mov 	r6, #ballX
+	ldr		r5, [r0]
+	cmp 	r5, r6
+	bxne	lr
+
+	mov 	r6, #ballY
+	ldr		r5, [r0, #4]
+	cmp 	r5, r6
+	bxne	lr
+
+launchBall:	
+	
 	push {r5, r6, r7, lr}
 	
 	ldr	r0, =ball	@ r0 = base address of ball
@@ -415,15 +428,3 @@ top6:	@ Inner loop runs <object width> times, drawing 1
 
 	pop	{r4, r5, r6}
 	bx	lr
-
-
-
-
-
-
-
-
-
-
-
-	
