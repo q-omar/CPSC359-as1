@@ -64,24 +64,30 @@ looptop:
 	cmp	r0, #0
 	blne	processInput
 
+	@ Control ball movement
 	bl	moveBall
 	
-	mov	r0, #1000		// Change to adjust game speed
+	@ Delay to adjust game speed
+	mov	r0, #1000		
 	bl	delayMicroseconds
 
+	@ Check loss condition
 	ldr	r0, =loss
 	ldr	r0, [r0]
 	cmp	r0, #1
 	bleq	loseLife
+	@If lives = 0, draw game over screen
 	cmp r3, #0
-    beq drawGameOver
-    
-    ldr r0, =score
-    ldr r0, [r0]
-    mov r1, #120
-    cmp r0, r1
-    beq drawWin
+    	beq drawGameOver
 
+	@ Checks win condition
+    	ldr r0, =score
+    	ldr r0, [r0]
+    	mov r1, #120
+	@ If win condition is true, draw win screen
+    	cmp r0, r1
+    	beq drawWin
+	
 	b	looptop
 
 .global haltLoop$
@@ -92,48 +98,49 @@ looptop:
 @ Checks for collisions between the ball and the paddle, and all bricks
 collisionCheck:
 	push	{r4, r5, r6, lr}
-
+	
+	@ Checks hit for paddle by calling checkHit
 	ldr	r0, =paddle
 	bl	checkHit
 
+	@ Checks hit for all bricks
 	ldr	r4, =bricks
 	ldr	r5, =endBricks
+	
+@ Collision loop for the bricks	
 colLoop:
 	mov	r0, r4
 	ldr	r1, [r4, #20]	@ Get health of brick
-	cmp	r1, #0
-	beq	colLoopEnd
+	cmp	r1, #0		@ If brick health is 0
+	beq	colLoopEnd	@ do not check for collisions
 
+	@ Check hit for bricks
 	bl	checkHit
-	mov	r6, r0
+	mov	r6, r0		@ Store result
 
+	@ Increment score if a brick was hit
 	cmp	r6, #1		@ See if a brick was hit
-
 	ldreq	r1, =score	@ Get score
 	ldreq	r2, [r1]
-	addeq	r2, #1
+	addeq	r2, #1		@ increment score
 	streq	r2, [r1]	@ Update score
-	bleq	drawScore
+	bleq	drawScore	@ Draw score if a brick was hit
 
 	ldreq	r1, [r4, #20]	@ Get health of brick
 	subeq	r1, #1		@ Decrease health of brick
-	streq	r1, [r4, #20]
+	streq	r1, [r4, #20]	@ Store health of brick
 
-	cmp	r1, #0		@ If brick health is 0, clear
+	cmp	r1, #0		@ If brick health is 0, clear the brick
 	moveq	r0, r4
 	bleq	clearObj
-
-	cmp	r6, #1
-	moveq	r0, #10000
-	bleq	delayMicroseconds
-
+@ Check end of bricks
 colLoopEnd:
 	add	r4, #brickSize
-
-	cmp	r4, r5
+	
+	cmp	r4, r5		@ If not end of bricks, continue 
 	blt	colLoop
 
-endColChk:
+endColChk:			@ Else, end loop
 
 	pop	{r4, r5, r6, pc}
 
@@ -195,7 +202,8 @@ checkHit:
 	mov	r1, centerX
 	mov	r2, centerY
 	bl	checkSide
-
+	
+	@ If no hit, end 
 	cmp	r0, #0
 	moveq	r0, #1
 	beq	endChkHit
@@ -269,17 +277,6 @@ paddleTopHit:
 	mov	r0, #0		@ Return indicates side of paddle was hit
 	b endSideChk
 
-
-//padSideHit:
-//	ldr	r3, [r0]	@ r3 = left x coord of rect
-//	cmp	r1, r3		@ If center X < left X coord, ball is hitting left
-//	ldr	r2, =ballDir
-//	movlt	r1, #4
-//	movgt	r1, #1
-//	str	r1, [r2]	@ Store new direction of ball to bounce up
-//	mov	r0, #0		@ Return indicates side of paddle was hit
-
-
 endSideChk:
 	pop	{r4, pc}
 
@@ -295,7 +292,7 @@ nearestX:
 	add	r4, r2, r3	@ r4 = rightmost x coord of object
 
 	cmp	r1, r2
-	movlt	r0, r2			@ If center is < rect x coordinate, return rect x
+	movlt	r0, r2		@ If center is < rect x coordinate, return rect x
 	blt	endNearX
 
 	cmp	r1, r4		@ If center is > rightmost side of rect, return rightmost X
@@ -316,7 +313,7 @@ nearestY:
 	add	r4, r2, r3	@ r4 = bottom Y coord of object
 
 	cmp	r1, r2
-	movlt	r0, r2			@ If center is < rect y coordinate, return rect y
+	movlt	r0, r2		@ If center is < rect y coordinate, return rect y
 	blt	endNearX
 
 	cmp	r1, r4		@ If center is > bottom side of rect, return bottom y
@@ -354,8 +351,8 @@ loseLife:
 
 
 	cmp	r4, #0	
-	moveq r3, r4	@ Otherwise game over*	
-    movne r3, #1	@ Otherwise game over*	
+	moveq r3, r4	@ Return 0 if game over
+    	movne r3, #1	@ Else, return #1	
 
 	pop	{r4, pc}
 
@@ -370,12 +367,12 @@ resetPaddle:
 	@ Center paddle in middle of window
 	ldr	r0, =paddle
 	mov	r1, #padX
-	str	r1, [r0]	// Store X coordinate
+	str	r1, [r0]	@ Store X coordinate
 
 	mov	r1, #padY
-	str	r1, [r0, #4]	// Store Y coordinate
+	str	r1, [r0, #4]	@ Store Y coordinate
 
-	bl	drawRect	// Draw paddle at initial coordinates
+	bl	drawRect	@ Draw paddle at initial coordinates
 
 	pop	{pc}
 
@@ -387,23 +384,26 @@ resetBall:
 	ldr	r0, =ball
 	bl	clearObj
 
+	@ load initial x coordinate of ball
 	ldr	r0, =ball
 	mov	r1, #ballX
-	str	r1, [r0]	// Store X coord
+	str	r1, [r0]	@ Store X coord
 
+	@ load initial y coordinate of ball
 	mov	r1, #ballY
-	str	r1, [r0, #4]	// Store Y coordinate
+	str	r1, [r0, #4]	@ Store y coord
 	bl	drawImage
 
 	@ Reset direction of ball
 	ldr	r0, =ballDir
 	mov	r1, #1
 	str	r1, [r0]
+@ Wait for b to be pressed to release ball
 bPressed:
-	bl getInput	
-	mov r1, #0xfffe
+	bl getInput		@ Detect input
+	mov r1, #0xfffe		@ If input is B, return
 	cmp r0, r1
-	bne bPressed
+	bne bPressed		@ Else, wait for B to be pressed
 
 	pop	{pc}
 
@@ -496,25 +496,15 @@ processInput:
 	mov		r0, r4
 	mov		r1, #4
 	bl		getBit
-	cmp		r1, #0		// If Start is pressed, reset game
+	cmp		r1, #0		@ If Start is pressed, reset game
 	bleq	initGame
 
 	@ Check if Select is pressed
 	mov		r0, r4
 	mov		r1, #3
 	bl		getBit
-	cmp		r1, #0		// If select is pressed, go back to main menu 
+	cmp		r1, #0		@ If select is pressed, go back to main menu 
 	beq		main
-
-	@ Check if B is pressed
-	mov		r0, r4
-	mov 	r1, #1
-	bl 		getBit
-
-
-	
-// Return to menu if so
-
 
 	pop	{r4, r5, pc}
 
@@ -747,20 +737,20 @@ moveBall:
 @ Sets the health of all the bricks to full.
 resetBricks:
 	ldr	r0, =bricks
-	mov	r1, #6		// Health counter
-	mov	r2, #bPerRow	// Counter for # of bricks in a row
+	mov	r1, #6		@ Health counter
+	mov	r2, #bPerRow	@ Counter for # of bricks in a row
 
 outer2:	@ Outer loop runs once for each row of bricks
 	mov	r2, #bPerRow
 
 inner2: @ Inner loop runs once for each brick in a row
-	str	r1, [r0, #20]	// Store health for single brick
-	add	r0, #brickSize	// Update r0 to address of next brick
+	str	r1, [r0, #20]	@ Store health for single brick
+	add	r0, #brickSize	@ Update r0 to address of next brick
 
-	subs	r2, #1		// Loop for each brick in the row
+	subs	r2, #1		@ Loop for each brick in the row
 	bne	inner2
 
-	subs	r1, #2		// Decrease health of bricks in next row
+	subs	r1, #2		@ Decrease health of bricks in next row
 	bne	outer2
 
 	bx	lr
