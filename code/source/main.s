@@ -41,8 +41,8 @@ ballY = padY - ballWidth		// 793
 onesDigX = 750
 tensDigX = onesDigX - 40
 livesX = 1025
-
 numLives = 3
+
 
 .global main
 main:
