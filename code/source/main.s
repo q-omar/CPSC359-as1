@@ -216,30 +216,50 @@ endChkHit:
 @ 0 = hit end of paddle
 checkSide:
 	push	{r4, lr}
+	
+	ldr r3, =paddle
+	cmp r0, r3
+	beq paddleTopHit
 
+topRect:
 	ldr	r3, [r0, #4]	@ r3 = top y coord of rect
 	cmp	r2, r3
 	movlt	r0, #1		@ if centerY < r3, ball is hitting top
 	blt	endSideChk
 
-	ldr	r4, [r0, #12]	@ r4 = height of rect
-	add	r3, r4		@ r3 = bottom y coord of rect
+bottomRect2:
+	ldr	r3, [r0, #12]	@ r3 = height of rect
 	cmp	r2, r3
 	movgt	r0, #3		@ If center Y > r3, ball is hitting bottom
 	bgt	endSideChk
 
 	@ At this point the ball is somewhere at the sides of the object
 	@ Check if the object is the paddle
+
+check:    //these arent being executed, bottomRect always branches to endsidechk
 	ldr	r3, =paddle
 	cmp	r0, r3
 	beq	padSideHit
 
+sideRect:
 	ldr	r3, [r0]	@ r3 = left x coord of rect
 	cmp	r1, r3		@ If center X < left X coord, ball is hitting left
 	movlt	r0, #4
 	movgt	r0, #2		@ Otherwise ball is hitting right
-
 	b	endSideChk
+
+
+paddleTopHit:
+	ldr	r3, [r0]	@ r3 = left x coord of rect
+	add r3, #50		@add width 
+	cmp	r1, r3		@ If center X < left X coord, ball is hitting left
+	ldr	r2, =ballDir
+	movlt	r1, #4
+	movgt	r1, #1
+	str	r1, [r2]	@ Store new direction of ball to bounce up
+	mov	r0, #0		@ Return indicates side of paddle was hit
+	b endSideChk
+
 
 padSideHit:
 	ldr	r3, [r0]	@ r3 = left x coord of rect
@@ -248,8 +268,8 @@ padSideHit:
 	movlt	r1, #4
 	movgt	r1, #1
 	str	r1, [r2]	@ Store new direction of ball to bounce up
-	
 	mov	r0, #0		@ Return indicates side of paddle was hit
+
 
 endSideChk:
 	pop	{r4, pc}
@@ -318,7 +338,7 @@ loseLife:
 
 	cmp	r4, #0	
 	blne	drawLives
-	
+
 	cmp	r4, #0	
 	blne	resetBall
 
@@ -485,8 +505,7 @@ processInput:
 	mov 	r1, #1
 	bl 		getBit
 
-	cmp 	r1, #0
-	bleq	checkLaunch
+
 	
 // Return to menu if so
 
@@ -540,18 +559,7 @@ leftmov:
 end1:
 	pop	{r4, r5, r6, r7, r8, pc}
 
-checkLaunch:
 
-	ldr	r0, =ball	@ r0 = base address of ball	
-	mov 	r6, #ballX
-	ldr		r5, [r0]
-	cmp 	r5, r6
-	bxne	lr
-
-	mov 	r6, #ballY
-	ldr		r5, [r0, #4]
-	cmp 	r5, r6
-	bxne	lr
 
 @ Changes direction of ball after collision with a wall below the ball
 @ r0 - y-coordinate representing the wall
@@ -748,17 +756,17 @@ resetBricks:
 	mov	r1, #3		// Health counter
 	mov	r2, #bPerRow	// Counter for # of bricks in a row
 
-outer2:	@ Outer loop runs once for each row of breaks
+outer2:	@ Outer loop runs once for each row of bricks
 	mov	r2, #bPerRow
 
 inner2: @ Inner loop runs once for each brick in a row
 	str	r1, [r0, #20]	// Store health for single brick
 	add	r0, #brickSize	// Update r0 to address of next brick
 
-	sub	r2, #1		// Loop for each brick in the row
+	subs	r2, #1		// Loop for each brick in the row
 	bne	inner2
 
-	sub	r1, #1		// Decrease health of bricks in next row
+	subs	r1, #1		// Decrease health of bricks in next row
 	bne	outer2
 
 	bx	lr
