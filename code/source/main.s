@@ -609,7 +609,8 @@ rightWall:
 
 	cmp	r7, r6
 	blt	dirElse1
-
+	
+	@ Change ball direction according to previous direction
 	ldr	r1, =ballDir
 	ldr	r3, [r1]
 	cmp	r3, #1
@@ -633,9 +634,9 @@ leftWall:
 	mov	r6, r0
 
 	cmp	r5, r6
-
 	bge	dirElse2
-
+	
+	@ Change ball direction according to previous direction
 	ldr	r1, =ballDir
 	ldr	r3, [r1]
 	cmp	r3, #3
@@ -780,7 +781,7 @@ initBricks:
 	add	width, #brickSpacing
 
 	mov	height, #brickHeight
-	add	height, #brickSpacing		// Increase spacing between bricks
+	add	height, #brickSpacing		@ Increase spacing between bricks
 
 outer1:	@ Outer loop runs once for each row of bricks
 
@@ -793,17 +794,17 @@ inner1:	@ Inner loop runs once for every brick in a row
 	str	ycoord, [r0, #4]
 
 	@ Increment brick address and x coordinate
-	add	r0, #brickSize			@ 24 bytes = size of each brick in memory		
+	add	r0, #brickSize		@ 24 bytes = size of each brick in memory		
 	add	xcoord, width
 
 	add	r5, #1
-	cmp	r5, r1		@ Compare counter to # bricks per row
+	cmp	r5, r1			@ Compare counter to # bricks per row
 	blt	inner1
 
 	add	ycoord, height		@ Increment y coordinate to new row
 	mov	xcoord, #brickStartX
 
-	subs	r2, #1		@ Loop for each row of bricks
+	subs	r2, #1			@ Loop for each row of bricks
 	bne	outer1
 
 	pop	{r4, r5, r6, r7}
