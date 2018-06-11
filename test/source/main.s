@@ -35,7 +35,7 @@ padY = lowerBound - 100				// 800
 
 @ Ball starting parameters
 ballWidth = 15
-ballRad = ballWidth/2
+ballRad = 8
 ballX = padX + padWidth/2 - ballWidth/2    // 793
 ballY = padY - ballWidth		// 793
 
@@ -95,9 +95,29 @@ collisionCheck:
 	ldr	r4, =bricks
 	ldr	r5, =endBricks
 colLoop:
-
 	mov	r0, r4
+	ldr	r1, [r4, #20]	@ Get health of brick
+	cmp	r1, #0
+	beq	colLoopEnd
+
 	bl	checkHit
+	cmp	r0, #1		@ See if a brick was hit
+
+	ldreq	r1, =score	@ Get score
+	ldreq	r2, [r1]
+	addeq	r2, #1
+	streq	r2, [r1]	@ Update score
+	bleq	drawScore
+
+	ldreq	r1, [r4, #20]	@ Get health of brick
+	subeq	r1, #1		@ Decrease health of brick
+	streq	r1, [r4, #20]
+
+	cmp	r1, #0		@ If brick health is 0, clear
+	moveq	r0, r4
+	bleq	clearObj
+
+colLoopEnd:
 	add	r4, #brickSize
 
 	cmp	r4, r5
@@ -107,6 +127,7 @@ colLoop:
 
 @ Detects collisions between the ball and rectangular objects.
 @ r0 - address of rectangular object to check
+@ Returns 1 if there was a hit.
 checkHit:
 	push	{r4, r5, r6, r7, r8, r9, lr}
 
@@ -163,6 +184,10 @@ checkHit:
 	mov	r2, centerY
 	bl	checkSide
 
+	cmp	r0, #0
+	moveq	r0, #1
+	beq	endChkHit
+
 	mov	r4, r0		@ Store side that was hit
 
 	cmp	r4, #2		@ If ball is bouncing the right wall
@@ -181,6 +206,7 @@ checkHit:
 	moveq	r0, rectYNear	@ Else ball is bouncing bottom of a rectangle
 	bleq	topWall
 
+	mov	r0, #1
 endChkHit:
 	pop	{r4, r5, r6, r7, r8, r9, pc}
 
@@ -189,6 +215,7 @@ endChkHit:
 @ r2 - center Y coordinate of ball
 @ Returns the side of the rectangle that was contacted
 @ 1 = top, 2 = right, 3 = bottom, 4 = left
+@ 0 = hit end of paddle
 checkSide:
 	push	{r4, lr}
 
@@ -203,10 +230,28 @@ checkSide:
 	movgt	r0, #3		@ If center Y > r3, ball is hitting bottom
 	bgt	endSideChk
 
+	@ At this point the ball is somewhere at the sides of the object
+	@ Check if the object is the paddle
+	ldr	r3, =paddle
+	cmp	r0, r3
+	beq	padSideHit
+
 	ldr	r3, [r0]	@ r3 = left x coord of rect
 	cmp	r1, r3		@ If center X < left X coord, ball is hitting left
 	movlt	r0, #4
 	movgt	r0, #2		@ Otherwise ball is hitting right
+
+	b	endSideChk
+
+padSideHit:
+	ldr	r3, [r0]	@ r3 = left x coord of rect
+	cmp	r1, r3		@ If center X < left X coord, ball is hitting left
+	ldr	r2, =ballDir
+	movlt	r1, #4
+	movgt	r1, #1
+	str	r1, [r2]	@ Store new direction of ball to bounce up
+	
+	mov	r0, #0		@ Return indicates side of paddle was hit
 
 endSideChk:
 	pop	{r4, pc}
@@ -598,7 +643,7 @@ topWall:
 
 	ldr	r2, =ball	@ r2 = base address of ball	
 	
-	@ Check if the paddle is already at the right boundary	
+	@ Check if the paddle is already at the top boundary
 	ldr	r5, [r2, #4]	@ r5 = y coordinate of top of ball
 	mov	r6, r0		@ r0 = top boundary
 
@@ -606,8 +651,8 @@ topWall:
 
 	bge	dirElse3
 
-	ldr	r1, =ballDir
-	ldr	r3, [r1]
+	ldr	r1, =ballDir	
+	ldr	r3, [r1]	@ r3 = ball direction
 	cmp	r3, #4
 	moveq	r2, #3
 
@@ -698,6 +743,7 @@ resetBricks:
 	mov	r2, #bPerRow	// Counter for # of bricks in a row
 
 outer2:	@ Outer loop runs once for each row of breaks
+	mov	r2, #bPerRow
 
 inner2: @ Inner loop runs once for each brick in a row
 	str	r1, [r0, #20]	// Store health for single brick
@@ -710,8 +756,6 @@ inner2: @ Inner loop runs once for each brick in a row
 	bne	outer2
 
 	bx	lr
-
-
 
 
 @ Sets the coordinates for all the bricks.
