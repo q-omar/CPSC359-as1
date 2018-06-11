@@ -442,13 +442,10 @@ initGame:
 	pop	{pc}
 	
 
-//----------------------------------------------------------------------------
-//Returns the bit at a given index of a 16-bit integer
-//Args:
-//r0 - the number
-//r1 - index of bit to get value of
-//Return:
-//r1 - the desired bit
+@Returns the bit at a given index of a 16-bit integer
+@r0 - the number
+@r1 - index of bit to get value of
+@r1 - returns the desired bit
 
 .global      getBit
 getBit:
