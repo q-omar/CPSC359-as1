@@ -1,5 +1,3 @@
-
-
 @ Code section
 .section .text
 
@@ -43,8 +41,8 @@ ballY = padY - ballWidth		// 793
 onesDigX = 750
 tensDigX = onesDigX - 40
 livesX = 1025
-
 numLives = 3
+
 
 .global main
 main:
@@ -52,10 +50,8 @@ main:
 	ldr	r0, =frameBufferInfo
 	bl	initFbInfo
 
-	@ Initialize SNES controller
+	@ Initialize SNES controller and draw menus
 	bl	initSNES
-	
-menu:
 	bl	drawMenu
 	bl 	menuControl
 
@@ -78,6 +74,8 @@ looptop:
 	ldr	r0, [r0]
 	cmp	r0, #1
 	bleq	loseLife
+	cmp r3, #0
+    beq drawGameOver
 
 	b	looptop
 
@@ -87,7 +85,7 @@ looptop:
 
 @ Checks for collisions between the ball and the paddle, and all bricks
 collisionCheck:
-	push	{r4, r5, lr}
+	push	{r4, r5, r6, lr}
 
 	ldr	r0, =paddle
 	bl	checkHit
@@ -101,7 +99,9 @@ colLoop:
 	beq	colLoopEnd
 
 	bl	checkHit
-	cmp	r0, #1		@ See if a brick was hit
+	mov	r6, r0
+
+	cmp	r6, #1		@ See if a brick was hit
 
 	ldreq	r1, =score	@ Get score
 	ldreq	r2, [r1]
@@ -117,13 +117,19 @@ colLoop:
 	moveq	r0, r4
 	bleq	clearObj
 
+	cmp	r6, #1
+	moveq	r0, #10000
+	bleq	delayMicroseconds
+
 colLoopEnd:
 	add	r4, #brickSize
 
 	cmp	r4, r5
 	blt	colLoop
 
-	pop	{r4, r5, pc}
+endColChk:
+
+	pop	{r4, r5, r6, pc}
 
 @ Detects collisions between the ball and rectangular objects.
 @ r0 - address of rectangular object to check
@@ -218,40 +224,55 @@ endChkHit:
 @ 0 = hit end of paddle
 checkSide:
 	push	{r4, lr}
+	
+	ldr r3, =paddle
+	cmp r0, r3
+	beq paddleTopHit
 
+topRect:
 	ldr	r3, [r0, #4]	@ r3 = top y coord of rect
 	cmp	r2, r3
 	movlt	r0, #1		@ if centerY < r3, ball is hitting top
 	blt	endSideChk
 
-	ldr	r4, [r0, #12]	@ r4 = height of rect
-	add	r3, r4		@ r3 = bottom y coord of rect
+bottomRect2:
+	ldr	r3, [r0, #12]	@ r3 = height of rect
 	cmp	r2, r3
 	movgt	r0, #3		@ If center Y > r3, ball is hitting bottom
 	bgt	endSideChk
 
 	@ At this point the ball is somewhere at the sides of the object
 	@ Check if the object is the paddle
-	ldr	r3, =paddle
-	cmp	r0, r3
-	beq	padSideHit
 
+sideRect:
 	ldr	r3, [r0]	@ r3 = left x coord of rect
 	cmp	r1, r3		@ If center X < left X coord, ball is hitting left
 	movlt	r0, #4
 	movgt	r0, #2		@ Otherwise ball is hitting right
-
 	b	endSideChk
 
-padSideHit:
+
+paddleTopHit:
 	ldr	r3, [r0]	@ r3 = left x coord of rect
+	add r3, #50		@add width 
 	cmp	r1, r3		@ If center X < left X coord, ball is hitting left
 	ldr	r2, =ballDir
 	movlt	r1, #4
 	movgt	r1, #1
 	str	r1, [r2]	@ Store new direction of ball to bounce up
-	
 	mov	r0, #0		@ Return indicates side of paddle was hit
+	b endSideChk
+
+
+//padSideHit:
+//	ldr	r3, [r0]	@ r3 = left x coord of rect
+//	cmp	r1, r3		@ If center X < left X coord, ball is hitting left
+//	ldr	r2, =ballDir
+//	movlt	r1, #4
+//	movgt	r1, #1
+//	str	r1, [r2]	@ Store new direction of ball to bounce up
+//	mov	r0, #0		@ Return indicates side of paddle was hit
+
 
 endSideChk:
 	pop	{r4, pc}
@@ -319,13 +340,16 @@ loseLife:
 	blne	resetPaddle
 
 	cmp	r4, #0	
-	blne	resetBall
-
-	cmp	r4, #0	
 	blne	drawLives
 
 	cmp	r4, #0	
-	bleq	initGame	@ Otherwise game over*	
+	blne	resetBall
+
+
+
+	cmp	r4, #0	
+	moveq r3, r4	@ Otherwise game over*	
+    movne r3, #1	@ Otherwise game over*	
 
 	pop	{r4, pc}
 
@@ -369,6 +393,11 @@ resetBall:
 	ldr	r0, =ballDir
 	mov	r1, #1
 	str	r1, [r0]
+bPressed:
+	bl getInput	
+	mov r1, #0xfffe
+	cmp r0, r1
+	bne bPressed
 
 	pop	{pc}
 
@@ -479,8 +508,7 @@ processInput:
 	mov 	r1, #1
 	bl 		getBit
 
-	cmp 	r1, #0
-	bleq	checkLaunch
+
 	
 // Return to menu if so
 
@@ -534,18 +562,7 @@ leftmov:
 end1:
 	pop	{r4, r5, r6, r7, r8, pc}
 
-checkLaunch:
 
-	ldr	r0, =ball	@ r0 = base address of ball	
-	mov 	r6, #ballX
-	ldr		r5, [r0]
-	cmp 	r5, r6
-	bxne	lr
-
-	mov 	r6, #ballY
-	ldr		r5, [r0, #4]
-	cmp 	r5, r6
-	bxne	lr
 
 @ Changes direction of ball after collision with a wall below the ball
 @ r0 - y-coordinate representing the wall
@@ -727,20 +744,20 @@ moveBall:
 @ Sets the health of all the bricks to full.
 resetBricks:
 	ldr	r0, =bricks
-	mov	r1, #3		// Health counter
+	mov	r1, #6		// Health counter
 	mov	r2, #bPerRow	// Counter for # of bricks in a row
 
-outer2:	@ Outer loop runs once for each row of breaks
+outer2:	@ Outer loop runs once for each row of bricks
 	mov	r2, #bPerRow
 
 inner2: @ Inner loop runs once for each brick in a row
 	str	r1, [r0, #20]	// Store health for single brick
 	add	r0, #brickSize	// Update r0 to address of next brick
 
-	sub	r2, #1		// Loop for each brick in the row
+	subs	r2, #1		// Loop for each brick in the row
 	bne	inner2
 
-	sub	r1, #1		// Decrease health of bricks in next row
+	subs	r1, #2		// Decrease health of bricks in next row
 	bne	outer2
 
 	bx	lr
