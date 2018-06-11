@@ -22,23 +22,9 @@ drawMenu:
 
 .global drawQuitScreen
 drawQuitScreen:
-	ldr	r0,=quitScreen
-	bl drawImage
+	ldr	r0,=window
+	bl drawRect
 	b	haltLoop$
-
-.global drawGameOver
-drawGameOver:
-	ldr r0, =gameOverScreen
-	bl drawImage
-	bl getInput
-	mov r7, #0
-	cmp	r0, r7
-	beq	drawGameOver
-	mov	r0, #60000
-	bl delayMicroseconds
-	
-	b main
-
 
 
 @ Draws the current number of lives onto the screen.
@@ -216,6 +202,7 @@ top4:	@ Inner loop runs <object width> times, drawing 1
 
 	pop	{r4, r5, r6, r7}
 	bx	lr
+
 
 
 
