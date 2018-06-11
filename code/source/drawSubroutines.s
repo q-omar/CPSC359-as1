@@ -26,8 +26,10 @@ drawQuitScreen:
 	bl drawImage
 	b	haltLoop$
 
+
 .global drawGameOver
 drawGameOver:
+	push {r7}
 	ldr r0, =gameOverScreen
 	bl drawImage
 	bl getInput
@@ -39,6 +41,19 @@ drawGameOver:
 	
 	b main
 
+.global drawWin
+drawWin:
+	push {r7}
+	ldr r0, =winGameScreen
+	bl drawImage
+	bl getInput
+	mov r7, #0
+	cmp	r0, r7
+	beq	drawWin
+	mov	r0, #60000
+	bl delayMicroseconds
+	
+	b main
 
 
 @ Draws the current number of lives onto the screen.

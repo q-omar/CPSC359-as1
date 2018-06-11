@@ -66,22 +66,28 @@ looptop:
 
 	bl	moveBall
 	
-	mov	r0, #5000		// Change to adjust game speed
+	mov	r0, #1000		// Change to adjust game speed
 	bl	delayMicroseconds
 
-	@ Check loss flag
 	ldr	r0, =loss
 	ldr	r0, [r0]
 	cmp	r0, #1
 	bleq	loseLife
 	cmp r3, #0
     beq drawGameOver
+    
+    ldr r0, =score
+    ldr r0, [r0]
+    mov r1, #120
+    cmp r0, r1
+    beq drawWin
 
 	b	looptop
 
 .global haltLoop$
 	haltLoop$:
 		b	haltLoop$
+
 
 @ Checks for collisions between the ball and the paddle, and all bricks
 collisionCheck:
@@ -257,7 +263,7 @@ paddleTopHit:
 	add r3, #50		@add width 
 	cmp	r1, r3		@ If center X < left X coord, ball is hitting left
 	ldr	r2, =ballDir
-	movlt	r1, #4
+	movle	r1, #4
 	movgt	r1, #1
 	str	r1, [r2]	@ Store new direction of ball to bounce up
 	mov	r0, #0		@ Return indicates side of paddle was hit
