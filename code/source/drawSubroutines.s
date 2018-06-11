@@ -22,8 +22,8 @@ drawMenu:
 
 .global drawQuitScreen
 drawQuitScreen:
-	ldr	r0,=window
-	bl drawRect
+	ldr	r0,=quitScreen
+	bl drawImage
 	b	haltLoop$
 
 .global drawGameOver

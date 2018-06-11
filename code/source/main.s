@@ -1,13 +1,12 @@
-
-
 @ Code section
 .section .text
 
 @ Game board boundaries
 leftBound = 520
 rightBound = 1080
-topBound = 120
+topBound = 120		@ Where top wall ends
 lowerBound = 900
+gameTopBound = 180	@ Boundary for game
 
 @ Window parameters
 windowX = 500
@@ -34,7 +33,7 @@ padY = lowerBound - 100				// 800
 
 @ Ball starting parameters
 ballWidth = 15
-ballRad = ballWidth/2
+ballRad = 8
 ballX = padX + padWidth/2 - ballWidth/2    // 793
 ballY = padY - ballWidth		// 793
 
@@ -51,10 +50,8 @@ main:
 	ldr	r0, =frameBufferInfo
 	bl	initFbInfo
 
-	@ Initialize SNES controller
+	@ Initialize SNES controller and draw menus
 	bl	initSNES
-	
-menu:
 	bl	drawMenu
 	bl 	menuControl
 
@@ -66,6 +63,7 @@ looptop:
 	bl	getInput
 	cmp	r0, #0
 	blne	processInput
+
 	bl	moveBall
 	
 	mov	r0, #5000		// Change to adjust game speed
@@ -76,7 +74,7 @@ looptop:
 	ldr	r0, [r0]
 	cmp	r0, #1
 	bleq	loseLife
-    cmp r3, #0
+	cmp r3, #0
     beq drawGameOver
 
 	b	looptop
@@ -87,15 +85,47 @@ looptop:
 
 @ Checks for collisions between the ball and the paddle, and all bricks
 collisionCheck:
-	push	{lr}
+	push	{r4, r5, lr}
 
 	ldr	r0, =paddle
 	bl	checkHit
 
-	pop	{pc}
+	ldr	r4, =bricks
+	ldr	r5, =endBricks
+colLoop:
+	mov	r0, r4
+	ldr	r1, [r4, #20]	@ Get health of brick
+	cmp	r1, #0
+	beq	colLoopEnd
+
+	bl	checkHit
+	cmp	r0, #1		@ See if a brick was hit
+
+	ldreq	r1, =score	@ Get score
+	ldreq	r2, [r1]
+	addeq	r2, #1
+	streq	r2, [r1]	@ Update score
+	bleq	drawScore
+
+	ldreq	r1, [r4, #20]	@ Get health of brick
+	subeq	r1, #1		@ Decrease health of brick
+	streq	r1, [r4, #20]
+
+	cmp	r1, #0		@ If brick health is 0, clear
+	moveq	r0, r4
+	bleq	clearObj
+
+colLoopEnd:
+	add	r4, #brickSize
+
+	cmp	r4, r5
+	blt	colLoop
+
+	pop	{r4, r5, pc}
 
 @ Detects collisions between the ball and rectangular objects.
 @ r0 - address of rectangular object to check
+@ Returns 1 if there was a hit.
 checkHit:
 	push	{r4, r5, r6, r7, r8, r9, lr}
 
@@ -147,16 +177,35 @@ checkHit:
 	bgt	endChkHit
 
 	@ Collision was detected, determine direction to change ball	
-	mov	r0, r9
+	mov	r0, r9		@ Set r0 to rect address
 	mov	r1, centerX
 	mov	r2, centerY
 	bl	checkSide
 
+	cmp	r0, #0
+	moveq	r0, #1
+	beq	endChkHit
+
+	mov	r4, r0		@ Store side that was hit
+
+	cmp	r4, #2		@ If ball is bouncing the right wall
+	moveq	r0, rectXNear
+	bleq	leftWall
+
+	cmp	r4, #4		@ If ball is bouncing the left wall
+	moveq	r0, rectXNear
+	bleq	rightWall
+
+	cmp	r4, #1		@ If ball is bouncing the top side
+	moveq	r0, rectYNear
+	bleq	bottomRect
 	
+	cmp	r4, #3
+	moveq	r0, rectYNear	@ Else ball is bouncing bottom of a rectangle
+	bleq	topWall
 
-
+	mov	r0, #1
 endChkHit:
-
 	pop	{r4, r5, r6, r7, r8, r9, pc}
 
 @ r0 - address of the rectangular object that has been collided with
@@ -164,6 +213,7 @@ endChkHit:
 @ r2 - center Y coordinate of ball
 @ Returns the side of the rectangle that was contacted
 @ 1 = top, 2 = right, 3 = bottom, 4 = left
+@ 0 = hit end of paddle
 checkSide:
 	push	{r4, lr}
 
@@ -178,10 +228,28 @@ checkSide:
 	movgt	r0, #3		@ If center Y > r3, ball is hitting bottom
 	bgt	endSideChk
 
+	@ At this point the ball is somewhere at the sides of the object
+	@ Check if the object is the paddle
+	ldr	r3, =paddle
+	cmp	r0, r3
+	beq	padSideHit
+
 	ldr	r3, [r0]	@ r3 = left x coord of rect
 	cmp	r1, r3		@ If center X < left X coord, ball is hitting left
 	movlt	r0, #4
 	movgt	r0, #2		@ Otherwise ball is hitting right
+
+	b	endSideChk
+
+padSideHit:
+	ldr	r3, [r0]	@ r3 = left x coord of rect
+	cmp	r1, r3		@ If center X < left X coord, ball is hitting left
+	ldr	r2, =ballDir
+	movlt	r1, #4
+	movgt	r1, #1
+	str	r1, [r2]	@ Store new direction of ball to bounce up
+	
+	mov	r0, #0		@ Return indicates side of paddle was hit
 
 endSideChk:
 	pop	{r4, pc}
@@ -248,15 +316,18 @@ loseLife:
 	cmp	r4, #0	
 	blne	resetPaddle
 
-    cmp	r4, #0	
+	cmp	r4, #0	
 	blne	drawLives
-
+	
 	cmp	r4, #0	
 	blne	resetBall
 
+
+
 	cmp	r4, #0	
 	moveq r3, r4	@ Otherwise game over*	
-    movne r3, #1
+    movne r3, #1	@ Otherwise game over*	
+
 	pop	{r4, pc}
 
 @ Returns ball to starting location.
@@ -299,7 +370,6 @@ resetBall:
 	ldr	r0, =ballDir
 	mov	r1, #1
 	str	r1, [r0]
-    
 bPressed:
 	bl getInput	
 	mov r1, #0xfffe
@@ -472,7 +542,7 @@ end1:
 
 checkLaunch:
 
-	ldr		r0, =ball	@ r0 = base address of ball	
+	ldr	r0, =ball	@ r0 = base address of ball	
 	mov 	r6, #ballX
 	ldr		r5, [r0]
 	cmp 	r5, r6
@@ -482,6 +552,22 @@ checkLaunch:
 	ldr		r5, [r0, #4]
 	cmp 	r5, r6
 	bxne	lr
+
+@ Changes direction of ball after collision with a wall below the ball
+@ r0 - y-coordinate representing the wall
+bottomRect:
+	push	{lr}
+
+	ldr	r1, =ballDir	
+	ldr	r3, [r1]	@ r3 = direction of ball
+	cmp	r3, #3
+	moveq	r2, #4
+
+	movne	r2, #1
+	str	r2, [r1]
+
+	pop	{pc}
+
 
 bottomWall:
 
@@ -503,15 +589,18 @@ bottomWall:
 
 	pop	{r5, r6, r7, pc}
 
+
+@ Changes direction of ball after collision with a wall to the right of the ball
+@ r0 - x-coordinate representing the wall
 rightWall:
 	push	{r5, r6, r7, lr}
 
-	ldr	r0, =ball	@ r0 = base address of ball	
+	ldr	r2, =ball	@ r2 = base address of ball	
 	
 	@ Check if the paddle is already at the right boundary	
-	ldr	r5, [r0]
-	mov	r6, #rightBound
-	ldr	r7, [r0, #8]	@ r7 = width of ball
+	ldr	r5, [r2]
+	mov	r6, r0
+	ldr	r7, [r2, #8]	@ r7 = width of ball
 	add	r7, r7, r5	@ r7 = x coordinate of right end of ball
 
 	cmp	r7, r6
@@ -526,17 +615,18 @@ rightWall:
 	str	r2, [r1]
 
 dirElse1:
-
 	pop	{r5, r6, r7, pc}
 
+@ Changes direction of ball after collision with a wall to the left of the ball
+@ r0 - x-coordinate representing the wall
 leftWall:
 	push	{r5, r6, r7, lr}
 
-	ldr	r0, =ball	@ r0 = base address of ball	
+	ldr	r2, =ball	@ r2 = base address of ball	
 	
 	@ Check if the paddle is already at the left boundary	
-	ldr	r5, [r0]		@ r5 = x coordinate
-	mov	r6, #leftBound
+	ldr	r5, [r2]		@ r5 = x coordinate
+	mov	r6, r0
 
 	cmp	r5, r6
 
@@ -553,21 +643,22 @@ leftWall:
 dirElse2:
 	pop	{r5, r6, r7, pc}
 
+@ r0 - y coordinate of wall to check
 topWall:
 	push	{r5, r6, r7, lr}
 
-	ldr	r0, =ball	@ r0 = base address of ball	
+	ldr	r2, =ball	@ r2 = base address of ball	
 	
-	@ Check if the paddle is already at the right boundary	
-	ldr	r5, [r0, #4]	@ r5 = y coordinate of top of ball
-	mov	r6, #topBound
+	@ Check if the paddle is already at the top boundary
+	ldr	r5, [r2, #4]	@ r5 = y coordinate of top of ball
+	mov	r6, r0		@ r0 = top boundary
 
 	cmp	r5, r6
 
 	bge	dirElse3
 
-	ldr	r1, =ballDir
-	ldr	r3, [r1]
+	ldr	r1, =ballDir	
+	ldr	r3, [r1]	@ r3 = ball direction
 	cmp	r3, #4
 	moveq	r2, #3
 
@@ -575,7 +666,6 @@ topWall:
 	str	r2, [r1]
 
 dirElse3:
-
 	pop	{r5, r6, r7, pc}
 
 moveBall:
@@ -622,9 +712,15 @@ moveBall:
 	bl	drawImage	@ Redraw the moved ball
 
 	@ Check boundaries
+	mov	r0, #rightBound
 	bl	rightWall
+
+	mov	r0, #leftBound
 	bl	leftWall
+
+	mov	r0, #gameTopBound
 	bl	topWall
+
 	bl	bottomWall
 
 	@ check for collisions
@@ -653,6 +749,7 @@ resetBricks:
 	mov	r2, #bPerRow	// Counter for # of bricks in a row
 
 outer2:	@ Outer loop runs once for each row of breaks
+	mov	r2, #bPerRow
 
 inner2: @ Inner loop runs once for each brick in a row
 	str	r1, [r0, #20]	// Store health for single brick
@@ -665,8 +762,6 @@ inner2: @ Inner loop runs once for each brick in a row
 	bne	outer2
 
 	bx	lr
-
-
 
 
 @ Sets the coordinates for all the bricks.
