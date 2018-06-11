@@ -8,9 +8,8 @@ onesDigX = 750
 tensDigX = onesDigX - 40
 livesX = 1025
 
-
-
-.global drawMenu // draws the main menu image
+@ Draws the main menu on the screen.
+.global drawMenu 
 drawMenu:
 	push {lr}
 	ldr r0, =mainMenuScreenImg //draws main menu screen
@@ -19,41 +18,56 @@ drawMenu:
 	bl	drawImage
 	pop {pc}
 
-
+@ Draws the quit screen.
 .global drawQuitScreen
 drawQuitScreen:
 	ldr	r0,=quitScreen
 	bl drawImage
 	b	haltLoop$
 
-
+@ Draws the game over screen.
 .global drawGameOver
 drawGameOver:
 	push {r7}
+
+	@ Draw the game over screen
 	ldr r0, =gameOverScreen
 	bl drawImage
-	bl getInput
-	mov r7, #0
+
+	bl getInput		@ Wait for user input
+	mov r7, #0		
 	cmp	r0, r7
-	beq	drawGameOver
+	beq	drawGameOver	@ If no input was received, stay on screen
+
+	mov	r0, #60000	@ Wait after checking for next input
+	bl delayMicroseconds
+
 	mov	r0, #60000
 	bl delayMicroseconds
 	
-	b main
+	b main			@ Return to main if the user presses a button
 
+@ Draws the win screen.
 .global drawWin
 drawWin:
 	push {r7}
+
+	@ Draw the win screen
 	ldr r0, =winGameScreen
 	bl drawImage
-	bl getInput
-	mov r7, #0
+
+	bl getInput		@ Wait for user input
+	mov r7, #0		
 	cmp	r0, r7
-	beq	drawWin
+	beq	drawWin		@ If no input was received, stay on screen
+
+	mov	r0, #60000	@ Wait after checking for next input
+	bl delayMicroseconds
+
 	mov	r0, #60000
 	bl delayMicroseconds
 	
-	b main
+	b main			@ Return to main if the user presses a button
 
 
 @ Draws the current number of lives onto the screen.
@@ -86,7 +100,7 @@ drawScore:
 	@ Load current score
 	ldr	r0, =score
 	ldr	curScore, [r0]
-	asr	curScore, #1		@ Divide score by 2 to draw
+	asr	curScore, #1		@ Draw internal score divided by 2
 	
 	@ Check the tens digit of the score
 	mov	r1, #10
@@ -122,15 +136,14 @@ drawBricks:
 	ldr	r4, =bricks
 	ldr	r5, =endBricks
 
-
 drawtop:
-	mov	r0, r4
-	bl	drawRect
-	add	r4, #brickSize
+	mov	r0, r4		@ Set r0 to the current brick address
+	bl	drawRect		@ Draw the brick
+	add	r4, #brickSize		@ Increment address to next brick
 
 	@ Check if current address is past end of array
 	cmp	r4, r5
-	blt	drawtop
+	blt	drawtop		@ Loop while bricks still remain
 
 	pop	{r4, r5, pc}
 
