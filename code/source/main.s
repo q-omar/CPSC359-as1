@@ -720,18 +720,6 @@ moveBall:
 	@ check for collisions
 	bl	collisionCheck
 
-//	mov	r0, #10000		// Slight delay while progressing the ball
-//	bl	delayMicroseconds
-	
-//	@	check for right bound
-//	ldr	r0, =ball	@ r0 = base address of ball	
-//	mov	r6, #rightBound
-//	ldr	r7, [r0, #8]	@ r7 = width of ball
-//	ldr	r5, [r0]
-//	add	r7, r7, r5	@ r7 = x coordinate of right end of ball
-//	cmp	r7, r6
-//	blt	launchBall
-
 	pop {r5, r6, r7, r8, r9, pc}
 	
 
