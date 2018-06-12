@@ -45,7 +45,7 @@ drawGameOver:
 	mov	r0, #60000
 	bl delayMicroseconds
 	
-	b main			@ Return to main if the user presses a button
+	b restart			@ Return to restart if the user presses a button
 
 @ Draws the win screen.
 .global drawWin
@@ -67,7 +67,7 @@ drawWin:
 	mov	r0, #60000
 	bl delayMicroseconds
 	
-	b main			@ Return to main if the user presses a button
+	b restart			@ Return to restart if the user presses a button
 
 
 @ Draws the current number of lives onto the screen.

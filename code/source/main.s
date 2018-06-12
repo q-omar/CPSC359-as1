@@ -52,6 +52,8 @@ main:
 
 	@ Initialize SNES controller and draw menus
 	bl	initSNES
+.global restart
+restart: @ used for restarting game from game over screen and win screens
 	bl	drawMenu
 	bl 	menuControl
 
@@ -504,7 +506,7 @@ processInput:
 	mov		r1, #3
 	bl		getBit
 	cmp		r1, #0		@ If select is pressed, go back to main menu 
-	beq		main
+	beq		restart
 
 	pop	{r4, r5, pc}
 
