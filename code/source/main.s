@@ -1,3 +1,7 @@
+@ Authors:
+@ Simratdeep Virk
+@ Celina Ma
+@ Omar Qureshi
 @ Code section
 .section .text
 
